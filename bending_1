@@ -175,7 +175,7 @@ MP,	EY,  	1,	0
 MP,	GXY, 	1,	0
 MP,	PRXY,	1,	0.3
 MP,	DENS,	1,	1000
-R, 	1,	0.01
+R, 	1,	1
 ! Connectivity
 EN,	1	1	7	8	2
 EN,	2	2	8	9	3
