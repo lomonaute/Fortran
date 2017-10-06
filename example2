@@ -1,0 +1,61 @@
+/TITLE, TRUSS GROUND STRUCTURE
+! GSTRUCT Version: 1.8
+! File: example2
+! User: 
+! Course: MEK 41525
+! Date: 220902
+! Time: 16:02
+! Element type: LINK1
+! No. of Nodes:       12
+! No. of Elements:    17
+/PREP7
+! Define element type: ET, type #, name
+ET, 1, LINK1
+! Define material property: MP, property, card #, value
+MP,EX,1,  1.00000000    
+! Define real constant (area) property: R, card #, value
+R,1,  1.00000000    
+! Define nodal coordinate: N, node #, x coord, y coord, z coord
+N,       1,  0.00000000    ,  0.00000000    , 0.
+N,       2,  2.00000000    ,  0.00000000    , 0.
+N,       3,  4.00000000    ,  0.00000000    , 0.
+N,       4,  6.00000000    ,  0.00000000    , 0.
+N,       5,  0.00000000    ,  2.00000000    , 0.
+N,       6,  2.00000000    ,  2.00000000    , 0.
+N,       7,  4.00000000    ,  2.00000000    , 0.
+N,       8,  6.00000000    ,  2.00000000    , 0.
+N,       9,  0.00000000    ,  4.00000000    , 0.
+N,       10,  2.00000000    ,  4.00000000    , 0.
+N,       11,  4.00000000    ,  4.00000000    , 0.
+N,       12,  6.00000000    ,  4.00000000    , 0.
+! Define element connectivity: EN, element #, nodal list 
+EN,       1,       1,       2
+EN,       2,       2,       3
+EN,       3,       3,       4
+EN,       4,       1,       5
+EN,       5,       2,       6
+EN,       6,       3,       7
+EN,       7,       4,       8
+EN,       8,       5,       6
+EN,       9,       6,       7
+EN,       10,       7,       8
+EN,       11,       5,       9
+EN,       12,       6,       10
+EN,       13,       7,       11
+EN,       14,       8,       12
+EN,       15,       9,       10
+EN,       16,       10,       11
+EN,       17,       11,       12
+! Define boundary support conditions: D, node #, dof label, value
+D,       1,UX,     0.000000000
+D,       1,UY,     0.000000000
+D,       5,UX,     0.000000000
+D,       5,UY,     0.000000000
+D,       9,UX,     0.000000000
+D,       9,UY,     0.000000000
+! Define load conditions: F, node #, dof label, value
+F,       4,FY,     -.0050000000
+F,       8,FY,     -.0100000000
+F,       12,FY,    -.0050000000
+FINISH
+

@@ -1,0 +1,33 @@
+/TITLE, TRUSS GROUND STRUCTURE
+! GSTRUCT Version: 1.8
+! File: example1
+! User: sigmund
+! Course: MEK 41525
+! Date: 220902
+! Time: 16:02
+! Element type: LINK1
+! No. of Nodes:       3
+! No. of Elements:    3
+/PREP7
+! Define element type: ET, type #, name
+ET, 1, LINK1
+! Define material property: MP, property, card #, value
+MP,EX,1,  1.00000000    
+! Define real constant (area) property: R, card #, value
+R,1,  1.00000000    
+! Define nodal coordinate: N, node #, x coord, y coord, z coord
+N,       1,  0.00000000    ,  0.00000000    , 0.
+N,       2,  0.00000000    ,  1.00000000    , 0.
+N,       3,  1.00000000    ,  0.00000000    , 0.
+! Define element connectivity: EN, element #, nodal list 
+EN,       1,       1,       3
+EN,       2,       1,       2
+EN,       3,       2,       3
+! Define boundary support conditions: D, node #, dof label, value
+D,       1,UX,     0.000000000
+D,       1,UY,     0.000000000
+D,       2,UX,     0.000000000
+! Define load conditions: F, node #, dof label, value
+F,       3,FY,    -.1000000000
+FINISH
+
