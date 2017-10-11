@@ -22,7 +22,7 @@ contains
                
 ! Hint for continuum elements:nt!eger, parameter :: mdim = 8 
         !integer, dimension(mdim) :: edof
-
+        integer :: e
         ! This subroutine computes the number of global equation,
         ! half bandwidth, etc and allocates global arrays.
 
@@ -32,9 +32,13 @@ contains
         if (.not. banded) then
             allocate (kmat(neqn, neqn))
         else
-            print *, 'ERROR in fea/initial'
-            print *, 'Band form not implemented -- you need to add your own code here'
-            stop
+            bw = 0 
+			do e=1,ne
+            	bw = max( bw, 2*(maxval(element(e)%ix) - minval(element(e)%ix) +1))
+                
+            end do
+            allocate (kmat(bw,neqn))
+            
         end if
         allocate (p(neqn), d(neqn))
         allocate (strain(ne, 3), stress(ne, 3))
@@ -72,10 +76,14 @@ contains
             call factor(kmat)
             ! Solve for displacement vector
             call solve(kmat, p)
-        else    
-            print *, 'ERROR in fea/displ'
-            print *, 'Band form not implemented -- you need to add your own code here'
-            stop
+        else 
+
+
+          call bfactor(kmat)
+          call bsolve(kmat, p)
+            !print *, 'ERROR in fea/displ'
+            !print *, 'Band form not implemented -- you need to add your own code here'
+            !stop
         end if
 
         ! Transfer results
@@ -190,9 +198,12 @@ contains
         if (.not. banded) then
             kmat = 0
         else
-            print*,'ERROR in fea/buildstiff'
-            print*,'Band form not implemented -- you need to add your own code here'
-            stop
+            !print*,'ERROR in fea/buildstiff'
+            !print*,'Band form not implemented -- you need to add your own code here'
+            !stop
+
+			kmat = 0
+            
         end if
 
         do e = 1, ne
@@ -229,11 +240,27 @@ contains
                         kmat(edof(i), edof(j)) = kmat(edof(i), edof(j)) + ke(i, j)
                     end do
                 end do
+
 ! Hint: Can you eliminate the loops above by using a different Fortran array syntax?
             else
-                print *, 'ERROR in fea/buildstiff'
-                print *, 'Band form not implemented -- you need to add our own code here'
-                stop
+                !print *, 'ERROR in fea/buildstiff'
+                !print *, 'Band form not implemented -- you need to add our own code here'
+                !stop
+				do i = 1, 2*nen
+                    do j = 1, 2*nen
+                      if (  (  (edof(i)+1-edof(j)) <= bw) .AND. (  (edof(i)+1-edof(j)) > 0 )) then                        
+                        kmat(edof(i)+1 -edof(j), edof(j)) = kmat(edof(i)+1 -edof(j), edof(j)) + ke(i, j)
+                      end if
+                    end do
+            	end do
+
+                !do i = 1,bw
+                !  print '(24(f4.2,tr1))', kmat(i,1:neqn)
+                !end do
+                !pause
+
+
+                
             end if 
         end do
     end subroutine buildstiff
@@ -246,19 +273,32 @@ contains
 
         use fedata
 
-        integer :: i, idof
+        integer :: i, ii, idof
         real(wp) :: penal
 
         ! Correct for supports
+		do i = 1,bw
+            	print '(24(f4.2,tr1))', kmat(i,1:neqn)
+        end do
+
+        
         if (.not. banded) then
             if (.not. penalty) then
+              !print '(24(f6.2,tr1))', kmat
+              pause
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
                     p(1:neqn) = p(1:neqn) - kmat(1:neqn, idof) * bound(i, 3)
+                    !print *, 'kmat', kmat(10, idof)
                     p(idof) = bound(i, 3)
                     kmat(1:neqn, idof) = 0
                     kmat(idof, 1:neqn) = 0
                     kmat(idof, idof) = 1
+					!print *, 'i = ', i
+                    
+					!print *, 'bound   ', bound(i,3), '   kmat= ', kmat(10, idof)
+                    
+
                 end do
             else
                 penal = penalty_fac*maxval(kmat)
@@ -269,10 +309,52 @@ contains
                 end do  
             end if
         else
-            print *, 'ERROR in fea/enforce'
-            print *, 'Band form not implemented -- you need to add your own code here'
-            stop
+            if (.not. penalty) then
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    !print *, kmat(9,2)
+                    do ii = 1, neqn
+                      !if (ii == 10) then
+                        !print *, kmat(9,2)
+                      !end if
+                      if (( ii >= idof -bw +1) .AND. (ii <= idof-1) ) then
+                    	p( ii ) = p(ii) - kmat(idof-ii + 1 , ii) * bound(i,3) 
+                        !print *, 'Upper area - other indice = ',   idof-ii + 1 ,'ii = ', ii                	  
+					  elseif ((ii >= idof) .AND. (ii <= idof+bw -1) ) then
+                      	p(ii)   = p(ii) - kmat( ii-idof +1   , idof) * bound(i,3)
+                        !print *, 'Lower area - other indice = ',   ii - idof + 1,  '  idof = ', idof, 
+                      end if
+					end do
+
+					p(idof) = bound(i, 3)
+                 end do
+                 do i = 1, nb 
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))  
+                    kmat(1:bw, idof) = 0
+                    do ii=1,bw
+                      if (idof-ii+1 >= 1) then
+                    	kmat(ii, idof-ii+1) = 0
+                      end if
+                    end do
+                    kmat(1, idof) = 1
+                end do
+            else
+                penal = penalty_fac*maxval(kmat)
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    kmat(1, idof) = kmat(1, idof) + penal
+                    p(idof) = penal * bound(i, 3)  
+                end do  
+            end if
         end if
+
+        		do i = 1,bw
+                print *, 'new kmat'
+            	print '(24(f4.2,tr1))', kmat(i,1:neqn)
+                end do
+                !print '(f6.2,tr1)', p
+                
+                
     end subroutine enforce
 !
 !--------------------------------------------------------------------------------------------------
