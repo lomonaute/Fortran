@@ -173,7 +173,7 @@ N,	156,	5,	1,	0
 MP,	EX,  	1,	100
 MP,	EY,  	1,	0
 MP,	GXY, 	1,	0
-MP,	PRXY,	1,	0.3
+MP,	PRXY,	1,	-0.9
 MP,	DENS,	1,	1000
 R, 	   1,	0.5
 ! Connectivity

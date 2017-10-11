@@ -254,7 +254,6 @@ contains
             f(1)       = fe
             f(2)       = 0
         endif
-        print *, 'Thickness', thk
         re = matmul(transpose(nface), f) * thk
         !print *, 'ERROR in plane42rect/plane42rect_re'
         !print *, 'subroutine incomplete -- you need to add some code in this subroutine'

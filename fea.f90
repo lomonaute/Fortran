@@ -20,9 +20,8 @@ contains
         use link1
         use plane42rect
                
-! Hint for continuum elements:
-!        integer, parameter :: mdim = 8 
-!        integer, dimension(mdim) :: edof
+! Hint for continuum elements:nt!eger, parameter :: mdim = 8 
+        !integer, dimension(mdim) :: edof
 
         ! This subroutine computes the number of global equation,
         ! half bandwidth, etc and allocates global arrays.
