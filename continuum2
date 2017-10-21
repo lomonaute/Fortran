@@ -37,7 +37,7 @@ EN,		  5,	   7,       10, 		11, 	 8
 EN, 	  6,	   8, 	    11, 	 12,  	 9
 ! Define boundary support conditions: D, node #, dof label, value
 D,       1,UX,     0.000000000
-D,       1,UY,     0.000000000
+D,       1,UY,     2.000000000
 D,       2,UX,     0.000000000
 D,       2,UY,     0.000000000
 D,       3,UX,     0.000000000
