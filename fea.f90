@@ -60,7 +60,7 @@ contains
 
         integer :: e
         real(wp), dimension(:), allocatable :: plotval
-
+		
         ! Build load-vector
         call buildload
 
@@ -72,18 +72,13 @@ contains
 
         if (.not. banded) then
             ! Factor stiffness matrix
-            !print *, kmat(20,20)
+                       
             call factor(kmat)
             ! Solve for displacement vector
             call solve(kmat, p)
-        else 
-
-
+        else
           call bfactor(kmat)
           call bsolve(kmat, p)
-            !print *, 'ERROR in fea/displ'
-            !print *, 'Band form not implemented -- you need to add your own code here'
-            !stop
         end if
 
         ! Transfer results
@@ -110,7 +105,7 @@ contains
 !$$$$$$                 print *, 'WARNING in fea/displ: Plot value not set -- you need to add your own code here'
             end if
         end do
-        print *, 'Displacement last node', d(neqn - 1),d(neqn)
+        !print *, 'Displacement last node', d(neqn - 1),d(neqn)
         call plot( elements, eval=plotval, title="Stress", legend=.true. )        
     end subroutine displ
 !
@@ -277,15 +272,11 @@ contains
         real(wp) :: penal
 
         ! Correct for supports
-		do i = 1,bw
-            	print '(24(f4.2,tr1))', kmat(i,1:neqn)
-        end do
-
-        
+                
         if (.not. banded) then
             if (.not. penalty) then
               !print '(24(f6.2,tr1))', kmat
-              pause
+              
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
                     p(1:neqn) = p(1:neqn) - kmat(1:neqn, idof) * bound(i, 3)
@@ -314,21 +305,17 @@ contains
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
                     !print *, kmat(9,2)
                     do ii = 1, neqn
-                      !if (ii == 10) then
-                        !print *, kmat(9,2)
-                      !end if
-                      if (( ii >= idof -bw +1) .AND. (ii <= idof-1) ) then
+                      
+                      if (( ii > idof -bw) .AND. (ii < idof) ) then
                     	p( ii ) = p(ii) - kmat(idof-ii + 1 , ii) * bound(i,3) 
                         !print *, 'Upper area - other indice = ',   idof-ii + 1 ,'ii = ', ii                	  
-					  elseif ((ii >= idof) .AND. (ii <= idof+bw -1) ) then
+					  elseif ((ii >= idof) .AND. (ii < idof+bw) ) then
                       	p(ii)   = p(ii) - kmat( ii-idof +1   , idof) * bound(i,3)
                         !print *, 'Lower area - other indice = ',   ii - idof + 1,  '  idof = ', idof, 
                       end if
 					end do
 
-					p(idof) = bound(i, 3)
-                 end do
-                 do i = 1, nb 
+                    p(idof) = bound(i, 3)
                     idof = int(2*(bound(i,1)-1) + bound(i,2))  
                     kmat(1:bw, idof) = 0
                     do ii=1,bw
@@ -347,11 +334,7 @@ contains
                 end do  
             end if
         end if
-
-        		do i = 1,bw
-                print *, 'new kmat'
-            	print '(24(f4.2,tr1))', kmat(i,1:neqn)
-                end do
+				
                 !print '(f6.2,tr1)', p
                 
                 
