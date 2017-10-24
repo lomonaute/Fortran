@@ -8,10 +8,10 @@ program main
     use fea
 
     implicit none
-
+	!call stopwatch('star')
     ! Read model data
     call input
-
+	
     ! Initialize problem
     call initial
 

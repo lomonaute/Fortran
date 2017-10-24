@@ -291,7 +291,7 @@ contains
             !! * `estrain(1)` = \(\epsilon_{11}\)
             !! * `estrain(2)` = \(\epsilon_{22}\)
             !! * `estrain(3)` = \(\epsilon_{12}\)
-        real(wp) :: bmat(3, 8), cmat(3, 3), aa, bb, fact, princ_stress, direc_stress 
+        real(wp) :: bmat(3, 8), cmat(3, 3), aa, bb, fact !, princ_stress, direc_stress, von_mises 
 		
 		aa = (xe(3)-xe(1))/2
         bb = (xe(8)-xe(2))/2
@@ -323,10 +323,12 @@ contains
         
         ! Compute element stress
         estress = matmul(cmat, estrain)
-
+		! Von mises stress
+        !von_mises = sqrt(estress(1)**2 + estress(2)**2 - estress(1)*estress(2) + 3*estress(3)**2)
+        
         ! Compute principal stress and direction
-        princ_stress = 0.5*(estress(1)+estress(2))* sqrt( ( 0.5*(estress(1)+estress(2)))**2 + (0.5*estress(3))**2) 
-        direc_stress = 0.5*atan(estress(3)/(estress(1)-estress(2)))
+        !princ_stress = 0.5*(estress(1)+estress(2))* sqrt( ( 0.5*(estress(1)+estress(2)))**2 + (0.5*estress(3))**2) 
+        !direc_stress = atan2((estress(1)-estress(2))/(princ_stress(1)-princ_stress(2)) , - 2*estress(3)/(princ_stress(1)-princ_stress(2))) /2
 !$$$$$$         print *, 'WARNING in plane42rect/plane42rect_ss: subroutine incomplete -- you need to' &
 !$$$$$$             // 'add some code in this subroutine'
     end subroutine plane42rect_ss

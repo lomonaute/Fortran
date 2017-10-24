@@ -60,6 +60,7 @@ contains
 
         integer :: e
         real(wp), dimension(:), allocatable :: plotval
+		real(wp) :: von_mises,principal_stress(ne, 3) , bcos, bsin
 		
         ! Build load-vector
         call buildload
@@ -89,7 +90,7 @@ contains
                 
         ! Output results
         call output
-
+		!call stopwatch('stop')
         ! Plot deformed shape
         call plot( undeformed + deformed )
 
@@ -102,11 +103,32 @@ contains
             else if (element(e)%id == 2) then
                 
                 plotval(e) = stress(e,1)
-!$$$$$$                 print *, 'WARNING in fea/displ: Plot value not set -- you need to add your own code here'
+
             end if
         end do
         !print *, 'Displacement last node', d(neqn - 1),d(neqn)
-        call plot( elements, eval=plotval, title="Stress", legend=.true. )        
+        call plot( elements, eval=plotval, title="Stress", legend=.true. )
+        
+		! Von mises stress
+        do e= 1, ne
+          
+                plotval(e) = sqrt(stress(e,1)**2 + stress(e,2)**2 - stress(e,1)*stress(e,2) + 3*stress(e,3)**2)
+        
+        end do
+        call plot( elements, eval=plotval, title="Von Mises Stress", legend=.true. )
+        ! Compute principal stress and direction
+        do e=1,ne
+          principal_stress(e,1) = 0.5*(stress(e,1)+stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
+          principal_stress(e,2) = 0.5*(stress(e,1)-stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
+          bcos = (stress(e,1)-stress(e,2))/(principal_stress(e,1)-principal_stress(e,2))
+           
+	      principal_stress(e,3) = 0.5 * atan2( bcos , - 2*stress(e,3)/(principal_stress(e,1)-principal_stress(e,2)))
+		  
+		  plotval(e) = principal_stress(e,3)
+        end do
+        call plot( elements, eval=plotval, title="Principal Stress 3", legend=.true. )
+        
+
     end subroutine displ
 !
 !--------------------------------------------------------------------------------------------------
@@ -397,8 +419,6 @@ contains
                 stress(e, 1:3) = estress
                 strain(e, 1:3) = estrain
 
-!$$$$$$                 print *, 'WARNING in fea/recover: Stress and strain not calculated for continuum' &
-!$$$$$$                     // 'elements -- you need to add your own code here'                
             end select
         end do
     end subroutine recover
