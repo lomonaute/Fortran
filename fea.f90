@@ -60,8 +60,9 @@ contains
 
         integer :: e
         real(wp), dimension(:), allocatable :: plotval
-		real(wp) :: von_mises,principal_stress(ne, 3) , bcos, bsin
-		
+		real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
+		integer, parameter :: out_unit=20
+        
         ! Build load-vector
         call buildload
 
@@ -112,24 +113,32 @@ contains
 		! Von mises stress
         do e= 1, ne
           
-                plotval(e) = sqrt(stress(e,1)**2 + stress(e,2)**2 - stress(e,1)*stress(e,2) + 3*stress(e,3)**2)
+                von_mises(e) = sqrt(stress(e,1)**2 + stress(e,2)**2 - stress(e,1)*stress(e,2) + 3*stress(e,3)**2)
         
         end do
-        call plot( elements, eval=plotval, title="Von Mises Stress", legend=.true. )
-        ! Compute principal stress and direction
-        do e=1,ne
-          principal_stress(e,1) = 0.5*(stress(e,1)+stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
-          principal_stress(e,2) = 0.5*(stress(e,1)-stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
-          bcos = (stress(e,1)-stress(e,2))/(principal_stress(e,1)-principal_stress(e,2))
-           
-	      principal_stress(e,3) = 0.5 * atan2( bcos , - 2*stress(e,3)/(principal_stress(e,1)-principal_stress(e,2)))
-		  
-		  plotval(e) = principal_stress(e,3)
-        end do
-        call plot( elements, eval=plotval, title="Principal Stress 3", legend=.true. )
-        
+        call plot( elements, eval=von_mises, title="Von Mises Stress", legend=.true. )
+!$$$$$$         ! Compute principal stress and direction
+!$$$$$$         do e=1,ne
+!$$$$$$           principal_stress(e,1) = 0.5*(stress(e,1)+stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
+!$$$$$$           principal_stress(e,2) = 0.5*(stress(e,1)-stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
+!$$$$$$           bcos = (stress(e,1)-stress(e,2))/(principal_stress(e,1)-principal_stress(e,2))
+!$$$$$$            
+!$$$$$$           principal_stress(e,3) = 0.5 * atan2( bcos , - 2*stress(e,3)/(principal_stress(e,1)-principal_stress(e,2)))
+!$$$$$$           
+!$$$$$$           plotval(e) = principal_stress(e,3)
+!$$$$$$         end do
+!$$$$$$         call plot( elements, eval=plotval, title="Principal Stress 3", legend=.true. )
+!$$$$$$         
 
-    end subroutine displ
+			! Ex 6.3 - compliance
+            open (unit=out_unit,file="results.txt",Access = 'append',Status='old')
+  			print *, "Element number - compliance  - A VM stress - B VM stress"
+            e = INT(sqrt(ne*1.0/5))
+			print *, ne, d(neqn)/(3*0.25*5), von_mises( e), von_mises(e**2+e)
+            write(out_unit, *) ne, d(neqn)/(3*0.25*5), von_mises(e), von_mises(e**2+e)
+            close (out_unit)
+            print * , "Displacement last node = ", d(neqn)
+   end subroutine displ
 !
 !--------------------------------------------------------------------------------------------------
 !

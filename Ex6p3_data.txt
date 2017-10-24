@@ -1,0 +1,2 @@
+Element number - A stress - B stress
+           20         -14.0173168365             -15.7837395212
