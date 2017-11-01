@@ -18,7 +18,7 @@ contains
         
         use fedata
         use link1
-        use plane42rect
+        use plane42
                
 ! Hint for continuum elements:nt!eger, parameter :: mdim = 8 
         !integer, dimension(mdim) :: edof
@@ -148,7 +148,7 @@ contains
         !! This subroutine builds the global load vector
 
         use fedata
-        use plane42rect
+        use plane42
 
         integer :: i, e,j, eface
 ! Hint for continuum elements:
@@ -183,7 +183,7 @@ contains
                  edof(2*j)   = 2 * element(e)%ix(j)
             end do
                 
-            call plane42rect_re( xe, eface, fe, thk, re)
+            call plane42_re(xe, eface, fe, thk, re)
                 
 			do j=1,8 !allocate the loads in {re} onto the {p} vector
             	p(edof(j)) = p(edof(j)) + re(j);
@@ -195,6 +195,7 @@ contains
                 stop
             end select
         end do
+        print *, 'loads', P
     end subroutine buildload
 !
 !--------------------------------------------------------------------------------------------------
@@ -206,7 +207,7 @@ contains
 
         use fedata
         use link1
-        use plane42rect
+        use plane42
 
         integer :: e, i, j
         integer :: nen 
@@ -254,7 +255,7 @@ contains
 				 young = mprop(element(e)%mat)%young
                  nu = mprop(element(e)%mat)%nu
                  thk = mprop(element(e)%mat)%thk
-            	 call plane42rect_ke(xe, young, nu, thk, ke)
+            	 call plane42_ke(xe, young, nu, thk, ke)
 !$$$$$$                  print *, 'ERROR in fea/buildstiff:'
 !$$$$$$                  print *, 'Stiffness matrix for plane42rect elements not implemented -- you need to add your own code here'
 !$$$$$$                  stop
@@ -381,7 +382,7 @@ contains
 
         use fedata
         use link1
-        use plane42rect
+        use plane42
 
         integer :: e, i, nen
         integer :: edof(mdim)
@@ -422,10 +423,10 @@ contains
 				young = mprop(element(e)%mat)%young
                 nu = mprop(element(e)%mat)%nu
                 thk  = mprop(element(e)%mat)%thk
-                call plane42rect_ke(xe, young, nu, thk, ke)
+                call plane42_ke(xe, young, nu, thk, ke)
                 
                 p(edof(1:2*nen)) = p(edof(1:2*nen)) + matmul(ke(1:2*nen,1:2*nen), de(1:2*nen))
-                call plane42rect_ss(xe, de, young, nu, estress, estrain)
+                call plane42_ss(xe, de, young, nu, estress, estrain)
                 stress(e, 1:3) = estress
                 strain(e, 1:3) = estrain
 
