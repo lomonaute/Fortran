@@ -163,7 +163,7 @@ module fedata
         !! Scale deformations when plotting
     real(wp), parameter :: scale_vec = 1.0_wp
         !! Scale length of vectors for plotting
-    real(wp), parameter :: scale_thk = 1.0_wp
+    real(wp), parameter :: scale_thk = 0.5_wp
         !! Scale thickness of lines
     logical, parameter :: banded = .true.
         !! Indicate whether the system matrix is in banded form or not (full matrix)

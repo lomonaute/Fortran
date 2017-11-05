@@ -195,7 +195,7 @@ contains
                 stop
             end select
         end do
-        print *, 'loads', P
+        !print *, 'loads', P
     end subroutine buildload
 !
 !--------------------------------------------------------------------------------------------------
@@ -256,6 +256,7 @@ contains
                  nu = mprop(element(e)%mat)%nu
                  thk = mprop(element(e)%mat)%thk
             	 call plane42_ke(xe, young, nu, thk, ke)
+                 !print *, 'ke', ke
 !$$$$$$                  print *, 'ERROR in fea/buildstiff:'
 !$$$$$$                  print *, 'Stiffness matrix for plane42rect elements not implemented -- you need to add your own code here'
 !$$$$$$                  stop
@@ -291,6 +292,9 @@ contains
                 
             end if 
         end do
+
+        !print*, 'kmat', kmat
+        
     end subroutine buildstiff
 !
 !--------------------------------------------------------------------------------------------------
