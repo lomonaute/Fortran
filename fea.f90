@@ -81,6 +81,8 @@ contains
         else
           call bfactor(kmat)
           call bsolve(kmat, p)
+
+          
         end if
 
         ! Transfer results
@@ -97,7 +99,7 @@ contains
 
         ! Plot element values
         allocate (plotval(ne))
-        !print*, stress
+        print*, 'de', d
         do e = 1, ne
             if (element(e)%id == 1) then
                 plotval(e) = stress(e,1)
@@ -107,6 +109,7 @@ contains
 
             end if
         end do
+        !print *, 'stress', stress
         !print *, 'Displacement last node', d(neqn - 1),d(neqn)
         call plot( elements, eval=plotval, title="Stress", legend=.true. )
         
@@ -131,13 +134,13 @@ contains
         
 
 			! Ex 6.3 - compliance
-            open (unit=out_unit,file="results.txt",Access = 'append',Status='old')
+            !open (unit=out_unit,file="results.txt",Access = 'append',Status='old')
   			!print *, "Element number - compliance  - A VM stress - B VM stress"
-            e = INT(sqrt(ne*1.0/5))
+            !e = INT(sqrt(ne*1.0/5))
 			!print *, ne, d(neqn)/(3*0.25*5), von_mises( e), von_mises(e**2+e), 
-            write(out_unit, *) ne, sum(d*p), von_mises(e), von_mises(e**2+e), principal_stress(e,1), principal_stress(e,2), &
-              principal_stress(e**2+e, 1), principal_stress(e**2+e, 2)
-            close (out_unit)
+            !write(out_unit, *) ne, sum(d*p), von_mises(e), von_mises(e**2+e), principal_stress(e,1), principal_stress(e,2), &
+            !  principal_stress(e**2+e, 1), principal_stress(e**2+e, 2)
+            !close (out_unit)
             !print * , "Displacement last node = ", d(neqn)
    end subroutine displ
 !
@@ -256,10 +259,10 @@ contains
                  nu = mprop(element(e)%mat)%nu
                  thk = mprop(element(e)%mat)%thk
             	 call plane42_ke(xe, young, nu, thk, ke)
-                 !print *, 'ke', ke
-!$$$$$$                  print *, 'ERROR in fea/buildstiff:'
-!$$$$$$                  print *, 'Stiffness matrix for plane42rect elements not implemented -- you need to add your own code here'
-!$$$$$$                  stop
+ 				print *, 'elem ', e
+                print *, 'xe', xe
+				print *, 'ke', ke
+
             end select
 
             ! Assemble into global matrix
@@ -430,7 +433,8 @@ contains
                 call plane42_ke(xe, young, nu, thk, ke)
                 
                 p(edof(1:2*nen)) = p(edof(1:2*nen)) + matmul(ke(1:2*nen,1:2*nen), de(1:2*nen))
-                call plane42_ss(xe, de, young, nu, estress, estrain)
+
+				call plane42_ss(xe, de, young, nu, estress, estrain)
                 stress(e, 1:3) = estress
                 strain(e, 1:3) = estrain
 

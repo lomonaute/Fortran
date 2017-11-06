@@ -33,7 +33,7 @@ contains
     subroutine plane42_ke(xe, young, nu, thk, ke)
 
         !! This subroutine constructs the stiffness matrix for
-        !! a rectangular 4-noded quad element.
+        !! a isoparametric 4-noded quad element.
 
         real(wp), intent(in) :: young
             !! Young's Modulus for this element
@@ -59,6 +59,7 @@ contains
         real(wp), dimension(3, 8) :: bmat
 
         real(wp), dimension(2, 2) :: jac
+        real(wp), dimension(4, 8) :: n_bar
 			!! Jacobian matrix
         real(wp) :: detjac
 			!! Determinant of the jacobian matrix
@@ -82,7 +83,7 @@ contains
         do i =1,2
 			do j = 1,2
 !            	print*, 'ke', ke
-            	call shape(xe, gaus_co(i), gaus_co(j), bmat, jac, detjac)
+            	call shape(xe, gaus_co(i), gaus_co(j),n_bar, bmat, jac, detjac)
 				ke = ke + gaus_w * thk * matmul(transpose(bmat), matmul(cmat, bmat)) * detjac
                 !print*, 'cmat', cmat
                 !print*, 'bmat', bmat
@@ -94,8 +95,8 @@ contains
 				
                 !print*, 'detjac', detjac
 				
-!                stop
-!                print*, 'ke(', i, ',', j, ') =', ke
+                !stop
+                !print*, 'bmat(1,1) =', bmat(1,1)
 			end do
         end do  
 !		print*, 'ke', ke
@@ -125,27 +126,21 @@ contains
             !! * `re(3:4)` = \((f_x^2, f_y^2)\) force at element node 1 in \(x\)- and y-direction
             !! * etc...
         real(wp) :: eta, xi, gaus_co(2), gaus_w
-        real(wp) :: J(2,2), n(2,8)
+        real(wp) :: jac(2,2), n_bar(2,8), bmat(3,8), detjac
+        
         integer :: i
 
 		gaus_w = 1
         gaus_co = (/ -1/sqrt(3.0),1/sqrt(3.0) /)
-        J = 0
+        
         if (eface == 1) then
           do i=1,2
 				eta = -1
                 xi = gaus_co(i)
 				
-				J(1,1) = 0.25*((eta-1)*xe(1)+(1-eta)*xe(3)+(1+eta)*xe(5)-(1+eta)*xe(7))
-       			J(1,2) = 0.25*((eta-1)*xe(2)+(1-eta)*xe(4)+(1+eta)*xe(6)-(1+eta)*xe(8))
-                
-				n = 0
-        		n(1,1) = (1-xi)*(1-eta)*0.25
-        		n(2,2) = (1-xi)*(1-eta)*0.25
-        		n(1,3) = (1+xi)*(1-eta)*0.25
-        		n(2,4) = (1+xi)*(1-eta)*0.25
+				call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
 				
-				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ -J(1,2), J(1,1) /) )
+				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ -jac(1,2), jac(1,1) /) )
             end do
             
         elseif (eface == 2) then
@@ -153,17 +148,9 @@ contains
 				eta = gaus_co(i)
                 xi = 1
 				
-        		J(2,1) = 0.25*((xi-1)*xe(1)-(1+xi)*xe(3)+(1+xi)*xe(5)+(1-xi)*xe(7))
-				J(2,2) = 0.25*((xi-1)*xe(2)-(1+xi)*xe(4)+(1+xi)*xe(6)+(1-xi)*xe(8))
-
-				n = 0
-
-        		n(1,3) = (1+xi)*(1-eta)*0.25
-        		n(2,4) = (1+xi)*(1-eta)*0.25
-        		n(1,5) = (1+xi)*(1+eta)*0.25
-        		n(2,6) = (1+xi)*(1+eta)*0.25
+        		call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
 				
-				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ -J(2,2), J(2,1) /) )
+				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ -jac(2,2), jac(2,1) /) )
             end do
             
         elseif (eface == 3) then
@@ -171,32 +158,18 @@ contains
 				eta = 1
                 xi = gaus_co(i)
 				
-				J(1,1) = 0.25*((eta-1)*xe(1)+(1-eta)*xe(3)+(1+eta)*xe(5)-(1+eta)*xe(7))
-       			J(1,2) = 0.25*((eta-1)*xe(2)+(1-eta)*xe(4)+(1+eta)*xe(6)-(1+eta)*xe(8))
-
-				n = 0
-        		n(1,5) = (1+xi)*(1+eta)*0.25
-        		n(2,6) = (1+xi)*(1+eta)*0.25
-        		n(1,7) = (1-xi)*(1+eta)*0.25
-        		n(2,8) = (1-xi)*(1+eta)*0.25
+				call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
 				
-				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ J(1,2), -J(1,1) /) )
+				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ jac(1,2), -jac(1,1) /) )
             end do 
         elseif (eface == 4) then
 			do i=1,2
 				eta = gaus_co(i)
                 xi = -1
-				
-        		J(2,1) = 0.25*((xi-1)*xe(1)-(1+xi)*xe(3)+(1+xi)*xe(5)+(1-xi)*xe(7))
-				J(2,2) = 0.25*((xi-1)*xe(2)-(1+xi)*xe(4)+(1+xi)*xe(6)+(1-xi)*xe(8))
-
-				n = 0
-        		n(1,1) = (1-xi)*(1-eta)*0.25
-        		n(2,2) = (1-xi)*(1-eta)*0.25
-        		n(1,7) = (1-xi)*(1+eta)*0.25
-        		n(2,8) = (1-xi)*(1+eta)*0.25
-				
-				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ J(2,2), -J(2,1) /) )
+                				
+        		call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+                
+				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ jac(2,2), -jac(2,1) /) )
             end do  
         endif
         
@@ -221,7 +194,7 @@ contains
             !! Element force vector
         real(wp), dimension(2) :: gaus_co
         real(wp) :: eta, xi, gaus_w, phi(2)
-        real(wp) :: jac(2,2), detjac, n(2,8)
+        real(wp) :: jac(2,2), detjac, n_bar(2,8), bmat(3,8)
         integer :: i, j
 		
 		gaus_w = 1
@@ -234,26 +207,9 @@ contains
           do j = 1,2
             eta = gaus_co(j)
 
-            jac = 0
-!			print*, 'xe', xe
-			jac(1,1) = 0.25*((1+eta)*xe(1)+(1-eta)*xe(3)+(-1+eta)*xe(5)+(-1-eta)*xe(7))
-            jac(1,2) = 0.25*((1.0+eta)*xe(2)+(1.0-eta)*xe(4)+(-1.0+eta)*xe(6)+(-1.0-eta)*xe(8))
-        	jac(2,1) = 0.25*((xi-1)*xe(1)-(1+xi)*xe(2)+(1+xi)*xe(5)+(1-xi)*xe(7))
-			jac(2,2) = 0.25*((xi-1)*xe(2)-(1+xi)*xe(4)+(1+xi)*xe(6)+(1-xi)*xe(8))
-
-			detjac = jac(1,1)*jac(2,2)-jac(2,1)*jac(1,2)
-
-			n = 0
-        	n(1,1) = (1-xi)*(1-eta)*0.25
-        	n(2,2) = (1-xi)*(1-eta)*0.25
-        	n(1,3) = (1+xi)*(1-eta)*0.25
-        	n(2,4) = (1+xi)*(1-eta)*0.25
-        	n(1,5) = (1+xi)*(1+eta)*0.25
-  			n(2,6) = (1+xi)*(1+eta)*0.25
-        	n(1,7) = (1-xi)*(1+eta)*0.25
-        	n(2,8) = (1-xi)*(1+eta)*0.25
-            
-            re = re + gaus_w * thk * matmul(transpose(n), phi) * detjac
+            call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+!			          
+            re = re + gaus_w * thk * matmul(transpose(n_bar), phi) * detjac
           end do
         end do
 	
@@ -279,22 +235,23 @@ contains
             !! Stress at a point inside the element
 
         real(wp), dimension(:), intent(out) :: estrain
+
+        real(wp), dimension(4,8) :: n_bar
             !! Strain at a point inside the element
 
         real(wp) :: bmat(3, 8), cmat(3, 3), fact !, princ_stress, direc_stress, von_mises 
 
-        real(wp) :: jac(2,2), detjac, xi, eta
-        xi = 0.0
-        eta = 0.0 
+        real(wp) :: jac(2,2), detjac
+        
         ! Build strain-displacement matrix
-		call shape(xe, xi, eta, bmat, jac, detjac)
+		call shape(xe, 0.0_wp, 0.0_wp, n_bar, bmat, jac, detjac)
 
         ! Compute element strain
 !        print *, 'de', de
 !        print *, 'bmat', bmat
 !        print *, 'detjac', detjac
         estrain = matmul(bmat, de)
-
+		 print *, 'estrain',estrain
         ! Build constitutive matrix (plane stress)
         cmat = 0
 		fact = young / (1 - nu**2)
@@ -312,7 +269,7 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-	subroutine shape(xe, xi, eta, bmat, jac, detjac)
+	subroutine shape(xe, xi, eta, n_bar, bmat, jac, detjac)
 		
 		real(wp), dimension(:), intent(in) :: xe
             !! Nodal coordinates of this element in undeformed configuration (see also [[plane42rect_ke]])
@@ -320,6 +277,8 @@ contains
             !! Xi coordinates in the natural coordinate system
         real(wp), intent(in) :: eta
             !! Eta coordinates in the natural coordinate system
+        real(wp), dimension(4, 8), intent(out) :: n_bar
+
 		real(wp), dimension(3, 8), intent(out) :: bmat
 
         real(wp), dimension(2, 2), intent(out) :: jac
@@ -327,13 +286,13 @@ contains
         real(wp), intent(out) :: detjac
 			!! Determinant of the jacobian matrix
             
-        real(wp) :: L(3, 4), gamma(2, 2), gamma_bar(4, 4), n_bar(4, 8) !!
+        real(wp) :: L(3, 4), gamma(2, 2), gamma_bar(4, 4) !!
 
 
         L = reshape( shape=(/ 3, 4 /), order=(/ 2, 1 /), source= & 
-        		(/ 1.0, 0.0, 0.0, 0.0, &         
-                   0.0, 0.0, 0.0, 1.0, &       
-                   0.0, 1.0, 1.0, 0.0  /) )
+        		(/ 1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, &         
+                   0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp, &       
+                   0.0_wp, 1.0_wp, 1.0_wp, 0.0_wp  /) )
 		!print*, 'xe', xe
 		!	jac(1,1) = 0.25*((1+eta)*xe(1)+(1-eta)*xe(3)+(-1+eta)*xe(5)+(-1-eta)*xe(7))
          !   jac(1,2) = 0.25*((1+eta)*xe(2)+(1.0-eta)*xe(4)+(-1.0+eta)*xe(6)+(-1.0-eta)*xe(8))
@@ -343,16 +302,12 @@ contains
         jac(1,2) = 0.25*((eta-1)*xe(2)+(1-eta)*xe(4)+(1+eta)*xe(6)-(1+eta)*xe(8))
         jac(2,1) = 0.25*((xi-1)*xe(1)-(1+xi)*xe(3)+(1+xi)*xe(5)+(1-xi)*xe(7))
 		jac(2,2) = 0.25*((xi-1)*xe(2)-(1+xi)*xe(4)+(1+xi)*xe(6)+(1-xi)*xe(8))
-!		print *, 'jac', jac
-!        print *, 'jac(1,2)', jac(1,2)
-!        print *, 'jac(2,1)', jac(2,1)
-!        print*, '(eta-1)*xe(2)', (eta-1)*xe(2)
-!        print*, '(1-eta)*xe(4)', (1-eta)*xe(4)
-!        print*, '(-1.0+eta)*xe(6)', (-1.0+eta)*xe(6)
-!        print*, '(-1.0-eta)*xe(8)', (-1.0-eta)*xe(8)
+		
 		detjac = jac(1,1)*jac(2,2)-jac(2,1)*jac(1,2)
 
-        gamma = reshape( shape=(/ 2, 2 /), order=(/ 2, 1 /), source= & 
+        
+        
+      gamma = reshape( shape=(/ 2, 2 /), order=(/ 2, 1 /), source= & 
         		(/ jac(2,2)/detjac, -jac(1,2)/detjac, &         
                    -jac(2,1)/detjac, jac(1,1)/detjac /) ) 
 !        print*, 'jac', jac
@@ -371,14 +326,18 @@ contains
                     0.0_wp, xi -1.0,  0.0_wp, -1.0-xi,  0.0_wp, 1.0+ xi,   0.0_wp,  1.0- xi /) )
 
         bmat = matmul(L, matmul(gamma_bar, n_bar))
-		
+
+        !print*, 'gamma(1,1) =', gamma(1,1)
 		!print*, 'eta', eta
         !print*, 'xi', xi
+        !print*, 'xe', xe
+        !print*, 'jac', jac
 		!print*, 'n_bar', n_bar
         !print*, 'bmat', bmat
-        !print *, 'gamma_bar shape', gamma_bar
-!        print *, 'detjac shape', detjac
-                   
+        !print *, 'gamma', gamma
+        !print *, 'detjac ', detjac
+          
+        !pause         
     end subroutine shape
 
 end module plane42
