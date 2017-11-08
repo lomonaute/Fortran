@@ -59,31 +59,31 @@ contains
         real(wp), dimension(3, 8) :: bmat
 
         real(wp), dimension(2, 2) :: jac
-        real(wp), dimension(4, 8) :: n_bar
+        real(wp), dimension(2, 8) :: n
 			!! Jacobian matrix
         real(wp) :: detjac
 			!! Determinant of the jacobian matrix
 
             
-        gaus_co = (/ 1.0/sqrt(3.0), -1.0/sqrt(3.0) /)
+        gaus_co = (/ 1.0_wp/sqrt(3.0_wp), -1.0_wp/sqrt(3.0_wp) /)
 
-        gaus_w = 1.0
+        gaus_w = 1.0_wp
 
         ! build constitutive matrix (plane stress)
         cmat = 0
         
-		fact = young / (1 - nu**2)
+		fact = young / (1.0_wp - nu**2.0_wp)
         cmat(1,1) = fact
         cmat(1,2) = fact*nu
         cmat(2,1) = fact*nu
         cmat(2,2) = fact
-        cmat(3,3) = fact*(1-nu)/2
+        cmat(3,3) = fact*(1.0_wp-nu)/2.0_wp
 		
 		ke = 0
         do i =1,2
 			do j = 1,2
 !            	print*, 'ke', ke
-            	call shape(xe, gaus_co(i), gaus_co(j),n_bar, bmat, jac, detjac)
+            	call shape(xe, gaus_co(i), gaus_co(j),n, bmat, jac, detjac)
 				ke = ke + gaus_w * thk * matmul(transpose(bmat), matmul(cmat, bmat)) * detjac
                 !print*, 'cmat', cmat
                 !print*, 'bmat', bmat
@@ -126,50 +126,50 @@ contains
             !! * `re(3:4)` = \((f_x^2, f_y^2)\) force at element node 1 in \(x\)- and y-direction
             !! * etc...
         real(wp) :: eta, xi, gaus_co(2), gaus_w
-        real(wp) :: jac(2,2), n_bar(2,8), bmat(3,8), detjac
+        real(wp) :: jac(2,2), n(2,8), bmat(3,8), detjac
         
         integer :: i
 
-		gaus_w = 1
-        gaus_co = (/ -1/sqrt(3.0),1/sqrt(3.0) /)
-        
+		gaus_w = 1.0_wp
+        gaus_co = (/ 1.0_wp/sqrt(3.0_wp), -1.0_wp/sqrt(3.0_wp) /)
+        re = 0
         if (eface == 1) then
           do i=1,2
-				eta = -1
+				eta = -1.0_wp
                 xi = gaus_co(i)
 				
-				call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+				call shape(xe, xi, eta, n, bmat, jac, detjac)
 				
-				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ -jac(1,2), jac(1,1) /) )
+				re = re + gaus_w * thk * fe * matmul( transpose(n), (/ -jac(1,2), jac(1,1) /) )
             end do
             
         elseif (eface == 2) then
         	do i=1,2
 				eta = gaus_co(i)
-                xi = 1
+                xi = 1.0_wp
 				
-        		call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
-				
-				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ -jac(2,2), jac(2,1) /) )
+        		call shape(xe, xi, eta, n, bmat, jac, detjac)
+				!print *, 'n = ', n
+				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ -jac(2,2), jac(2,1) /) )
             end do
             
         elseif (eface == 3) then
  			do i=1,2
-				eta = 1
+				eta = 1.0_wp
                 xi = gaus_co(i)
 				
-				call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+				call shape(xe, xi, eta, n, bmat, jac, detjac)
 				
-				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ jac(1,2), -jac(1,1) /) )
+				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ jac(1,2), -jac(1,1) /) )
             end do 
         elseif (eface == 4) then
 			do i=1,2
 				eta = gaus_co(i)
-                xi = -1
+                xi = -1.0_wp
                 				
-        		call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+        		call shape(xe, xi, eta, n, bmat, jac, detjac)
                 
-				re = re + gaus_w * thk * fe * matmul(transpose(n_bar), (/ jac(2,2), -jac(2,1) /) )
+				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ jac(2,2), -jac(2,1) /) )
             end do  
         endif
         
@@ -194,12 +194,12 @@ contains
             !! Element force vector
         real(wp), dimension(2) :: gaus_co
         real(wp) :: eta, xi, gaus_w, phi(2)
-        real(wp) :: jac(2,2), detjac, n_bar(2,8), bmat(3,8)
+        real(wp) :: jac(2,2), detjac, n(2,8), bmat(3,8)
         integer :: i, j
 		
-		gaus_w = 1
-        gaus_co = (/ -1/sqrt(3.0), 1/sqrt(3.0) /)
-        phi = 4 * thk * dens * transpose(acel)
+		gaus_w = 1.0_wp
+        gaus_co = (/ -1.0_wp/sqrt(3.0_wp), 1.0_wp/sqrt(3.0_wp) /)
+        phi = 4.0_wp * thk * dens * transpose(acel)
         
 		re = 0 
         do i = 1,2
@@ -207,9 +207,9 @@ contains
           do j = 1,2
             eta = gaus_co(j)
 
-            call shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+            call shape(xe, xi, eta, n, bmat, jac, detjac)
 !			          
-            re = re + gaus_w * thk * matmul(transpose(n_bar), phi) * detjac
+            re = re + gaus_w * thk * matmul(transpose(n), phi) * detjac
           end do
         end do
 	
@@ -236,7 +236,7 @@ contains
 
         real(wp), dimension(:), intent(out) :: estrain
 
-        real(wp), dimension(4,8) :: n_bar
+        real(wp), dimension(2,8) :: n
             !! Strain at a point inside the element
 
         real(wp) :: bmat(3, 8), cmat(3, 3), fact !, princ_stress, direc_stress, von_mises 
@@ -244,7 +244,7 @@ contains
         real(wp) :: jac(2,2), detjac
         
         ! Build strain-displacement matrix
-		call shape(xe, 0.0_wp, 0.0_wp, n_bar, bmat, jac, detjac)
+		call shape(xe, 0.0_wp, 0.0_wp, n, bmat, jac, detjac)
 
         ! Compute element strain
 !        print *, 'de', de
@@ -254,12 +254,12 @@ contains
 		 print *, 'estrain',estrain
         ! Build constitutive matrix (plane stress)
         cmat = 0
-		fact = young / (1 - nu**2)
+		fact = young / (1.0_wp - nu**2.0_wp)
 		cmat(1,1) = fact
         cmat(1,2) = fact*nu
         cmat(2,1) = fact*nu
         cmat(2,2) = fact
-        cmat(3,3) = fact*(1-nu)/2
+        cmat(3,3) = fact*(1.0_wp-nu)/2.0_wp
 !        print*, 'C', cmat
         ! Compute element stress
         estress = matmul(cmat, estrain)
@@ -269,7 +269,7 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-	subroutine shape(xe, xi, eta, n_bar, bmat, jac, detjac)
+	subroutine shape(xe, xi, eta, n, bmat, jac, detjac)
 		
 		real(wp), dimension(:), intent(in) :: xe
             !! Nodal coordinates of this element in undeformed configuration (see also [[plane42rect_ke]])
@@ -277,15 +277,15 @@ contains
             !! Xi coordinates in the natural coordinate system
         real(wp), intent(in) :: eta
             !! Eta coordinates in the natural coordinate system
-        real(wp), dimension(4, 8), intent(out) :: n_bar
-
+       
+		real(wp), dimension(2, 8), intent(out) :: n
 		real(wp), dimension(3, 8), intent(out) :: bmat
 
         real(wp), dimension(2, 2), intent(out) :: jac
 			!! Jacobian matrix
         real(wp), intent(out) :: detjac
 			!! Determinant of the jacobian matrix
-            
+        real(wp), dimension(4, 8) :: n_bar   
         real(wp) :: L(3, 4), gamma(2, 2), gamma_bar(4, 4) !!
 
 
@@ -298,10 +298,10 @@ contains
          !   jac(1,2) = 0.25*((1+eta)*xe(2)+(1.0-eta)*xe(4)+(-1.0+eta)*xe(6)+(-1.0-eta)*xe(8))
          
             
-        jac(1,1) = 0.25*((eta-1)*xe(1)+(1-eta)*xe(3)+(1+eta)*xe(5)-(1+eta)*xe(7))
-        jac(1,2) = 0.25*((eta-1)*xe(2)+(1-eta)*xe(4)+(1+eta)*xe(6)-(1+eta)*xe(8))
-        jac(2,1) = 0.25*((xi-1)*xe(1)-(1+xi)*xe(3)+(1+xi)*xe(5)+(1-xi)*xe(7))
-		jac(2,2) = 0.25*((xi-1)*xe(2)-(1+xi)*xe(4)+(1+xi)*xe(6)+(1-xi)*xe(8))
+        jac(1,1) = 0.25_wp*((eta-1.0_wp)*xe(1)+(1.0_wp-eta)*xe(3)+(1.0_wp+eta)*xe(5)-(1.0_wp+eta)*xe(7))
+        jac(1,2) = 0.25_wp*((eta-1.0_wp)*xe(2)+(1.0_wp-eta)*xe(4)+(1.0_wp+eta)*xe(6)-(1.0_wp+eta)*xe(8))
+        jac(2,1) = 0.25_wp*((xi-1.0_wp)*xe(1)-(1.0_wp+xi)*xe(3)+(1.0_wp+xi)*xe(5)+(1.0_wp-xi)*xe(7))
+		jac(2,2) = 0.25_wp*((xi-1.0_wp)*xe(2)-(1.0_wp+xi)*xe(4)+(1.0_wp+xi)*xe(6)+(1.0_wp-xi)*xe(8))
 		
 		detjac = jac(1,1)*jac(2,2)-jac(2,1)*jac(1,2)
 
@@ -319,12 +319,21 @@ contains
                    0.0_wp, 0.0_wp, gamma(1,1), gamma(1,2), &       
                    0.0_wp, 0.0_wp, gamma(2,1), gamma(2,2)  /) )
                    
-        n_bar = 0.25*reshape( shape=(/ 4, 8 /), order=(/ 2, 1 /), source= & 
-        		(/ eta-1.0,  0.0_wp, 1.0-eta,  0.0_wp, 1.0+eta,  0.0_wp, -1.0-eta,   0.0_wp, &         
-                   xi -1.0,  0.0_wp, -1.0-xi,  0.0_wp, 1.0+ xi,  0.0_wp,  1.0- xi,   0.0_wp, &
-                    0.0_wp, eta-1.0,  0.0_wp, 1.0-eta,  0.0_wp, 1.0+eta,   0.0_wp, -1.0-eta, & 
-                    0.0_wp, xi -1.0,  0.0_wp, -1.0-xi,  0.0_wp, 1.0+ xi,   0.0_wp,  1.0- xi /) )
-
+        n_bar = 0.25_wp*reshape( shape=(/ 4, 8 /), order=(/ 2, 1 /), source= & 
+        		(/ eta-1.0_wp,  0.0_wp, 1.0_wp-eta,  0.0_wp, 1.0_wp+eta,  0.0_wp, -1.0_wp-eta,   0.0_wp, &         
+                   xi -1.0_wp,  0.0_wp, -1.0_wp-xi,  0.0_wp, 1.0_wp+ xi,  0.0_wp,  1.0_wp- xi,   0.0_wp, &
+                    0.0_wp, eta-1.0_wp,  0.0_wp, 1.0_wp-eta,  0.0_wp, 1.0_wp+eta,   0.0_wp, -1.0_wp-eta, & 
+                    0.0_wp, xi -1.0_wp,  0.0_wp, -1.0_wp-xi,  0.0_wp, 1.0_wp+ xi,   0.0_wp,  1.0_wp- xi /) )
+		n(:,:) = 0.0_wp
+        n(1, 1) = (1 - xi)*(1 - eta)
+        n(2, 2) = n(1, 1)
+        n(1, 3) = (1 + xi)*(1 - eta)
+        n(2, 4) = n(1, 3)
+        n(1, 5) = (1 + xi)*(1 + eta)
+        n(2, 6) = n(1, 5)
+        n(1, 7) = (1 - xi)*(1 + eta)
+        n(2, 8) = n(1,7)
+        n(:,:) = 0.25_wp * n(:,:)
         bmat = matmul(L, matmul(gamma_bar, n_bar))
 
         !print*, 'gamma(1,1) =', gamma(1,1)

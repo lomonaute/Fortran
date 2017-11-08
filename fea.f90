@@ -74,11 +74,12 @@ contains
 
         if (.not. banded) then
             ! Factor stiffness matrix
-                       
+              print *,'p', p        
             call factor(kmat)
             ! Solve for displacement vector
             call solve(kmat, p)
         else
+          print *,'p', p  
           call bfactor(kmat)
           call bsolve(kmat, p)
 
@@ -121,15 +122,15 @@ contains
         end do
         !call plot( elements, eval=von_mises, title="Von Mises Stress", legend=.true. )
         ! Compute principal stress and direction
-        do e=1,ne
-          principal_stress(e,1) = 0.5*(stress(e,1)+stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
-          principal_stress(e,2) = 0.5*(stress(e,1)-stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
-          bcos = (stress(e,1)-stress(e,2))/(principal_stress(e,1)-principal_stress(e,2))
+        !do e=1,ne
+        !  principal_stress(e,1) = 0.5*(stress(e,1)+stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
+        !  principal_stress(e,2) = 0.5*(stress(e,1)-stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
+        !  bcos = (stress(e,1)-stress(e,2))/(principal_stress(e,1)-principal_stress(e,2))
            
-          principal_stress(e,3) = 0.5 * atan2( bcos , - 2*stress(e,3)/(principal_stress(e,1)-principal_stress(e,2)))
+         ! principal_stress(e,3) = 0.5 * atan2( bcos , - 2*stress(e,3)/(principal_stress(e,1)-principal_stress(e,2)))
           
           !plotval(e) = principal_stress(e,3)
-        end do
+        !end do
         !call plot( elements, eval=plotval, title="Principal Stress 3", legend=.true. )
         
 
@@ -322,9 +323,9 @@ contains
                     p(1:neqn) = p(1:neqn) - kmat(1:neqn, idof) * bound(i, 3)
                     !print *, 'kmat', kmat(10, idof)
                     p(idof) = bound(i, 3)
-                    kmat(1:neqn, idof) = 0
-                    kmat(idof, 1:neqn) = 0
-                    kmat(idof, idof) = 1
+                    kmat(1:neqn, idof) = 0.0_wp
+                    kmat(idof, 1:neqn) = 0.0_wp
+                    kmat(idof, idof) = 1.0_wp
 					!print *, 'i = ', i
                     
 					!print *, 'bound   ', bound(i,3), '   kmat= ', kmat(10, idof)
@@ -357,13 +358,13 @@ contains
 
                     p(idof) = bound(i, 3)
                     idof = int(2*(bound(i,1)-1) + bound(i,2))  
-                    kmat(1:bw, idof) = 0
+                    kmat(1:bw, idof) = 0.0_wp
                     do ii=1,bw
                       if (idof-ii+1 >= 1) then
-                    	kmat(ii, idof-ii+1) = 0
+                    	kmat(ii, idof-ii+1) = 0.0_wp
                       end if
                     end do
-                    kmat(1, idof) = 1
+                    kmat(1, idof) = 1.0_wp
                 end do
             else
                 penal = penalty_fac*maxval(kmat)
