@@ -340,6 +340,8 @@ contains
                 read (10, *) command, rvalue, rvalue2
                 accel(1) = rvalue
                 accel(2) = rvalue2
+            case ('ANTYPE','antype')
+            	cycle
             case default
                 write (*, *) 'ERROR: Unknown keyword: ', trim(command)
                 stop

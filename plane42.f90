@@ -30,7 +30,7 @@ module plane42
 
 contains
 
-    subroutine plane42_ke(xe, young, nu, thk, ke)
+    subroutine plane42_ke(xe, young, nu, thk, dens, ke, me)
 
         !! This subroutine constructs the stiffness matrix for
         !! a isoparametric 4-noded quad element.
@@ -40,6 +40,8 @@ contains
         real(wp), intent(in) :: nu
             !! Poisson's Ratio for this element
         real(wp), intent(in) :: thk
+			!! density
+        real(wp), intent(in) :: dens
             !! Thickness of this element
         real(wp), dimension(:), intent(in) :: xe
             !! Nodal coordinates of this element in undeformed configuration
@@ -52,7 +54,9 @@ contains
             !! See also [[plane42rect]]
         real(wp), dimension(:,:), intent(out) :: ke
             !! Stiffness matrix
-
+        real(wp), dimension(:,:), intent(out) :: me
+        	!! mass element matrix
+        
         real(wp) :: cmat(3,3), fact
         real(wp) :: gaus_co(2), gaus_w
 		integer  :: i,j
@@ -70,7 +74,7 @@ contains
         gaus_w = 1.0_wp
 
         ! build constitutive matrix (plane stress)
-        cmat = 0
+        cmat = 0.0_wp
         
 		fact = young / (1.0_wp - nu**2.0_wp)
         cmat(1,1) = fact
@@ -79,32 +83,22 @@ contains
         cmat(2,2) = fact
         cmat(3,3) = fact*(1.0_wp-nu)/2.0_wp
 		
-		ke = 0
-        do i =1,2
+		ke = 0.0_wp
+        me = 0.0_wp
+        do i = 1,2
 			do j = 1,2
-!            	print*, 'ke', ke
-            	call shape(xe, gaus_co(i), gaus_co(j),n, bmat, jac, detjac)
+
+            	call shape(xe, gaus_co(i), gaus_co(j), n, bmat, jac, detjac)
 				ke = ke + gaus_w * thk * matmul(transpose(bmat), matmul(cmat, bmat)) * detjac
-                !print*, 'cmat', cmat
-                !print*, 'bmat', bmat
-!                print*, 'matmul(cmat, bmat)', matmul(cmat, bmat)
-!                print*, 'BB', matmul(transpose(bmat), matmul(cmat, bmat))
-                !print*, 'ke', matmul(transpose(bmat), matmul(cmat, bmat)) * detjac
-!                print*, 'thk', thk
-!                print*, 'gaus_w', gaus_w
-				
-                !print*, 'detjac', detjac
-				
-                !stop
-                !print*, 'bmat(1,1) =', bmat(1,1)
+				me = me + gaus_w * thk * dens * matmul(transpose(n), n) * detjac
 			end do
         end do  
-!		print*, 'ke', ke
+
     end subroutine plane42_ke
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine plane42_re(xe, eface, fe, thk, re)
+    subroutine plane42_re(xe, eface, fe, thk, dens, re)
 
         !! This subroutine computes the element load vector due
         !! to surface traction (traction is always perpendicular
@@ -115,7 +109,7 @@ contains
 
         real(wp), intent(in) :: fe
             !! Value of surface traction (pressure)
-        real(wp), intent(in) :: thk
+        real(wp), intent(in) :: thk, dens
             !! Thickness of this element
         real(wp), dimension(:), intent(in) :: xe
             !! Nodal coordinates of this element in undeformed configuration (see also [[plane42rect_ke]])
@@ -149,7 +143,7 @@ contains
                 xi = 1.0_wp
 				
         		call shape(xe, xi, eta, n, bmat, jac, detjac)
-				!print *, 'n = ', n
+
 				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ -jac(2,2), jac(2,1) /) )
             end do
             
@@ -247,11 +241,8 @@ contains
 		call shape(xe, 0.0_wp, 0.0_wp, n, bmat, jac, detjac)
 
         ! Compute element strain
-!        print *, 'de', de
-!        print *, 'bmat', bmat
-!        print *, 'detjac', detjac
         estrain = matmul(bmat, de)
-		 print *, 'estrain',estrain
+
         ! Build constitutive matrix (plane stress)
         cmat = 0
 		fact = young / (1.0_wp - nu**2.0_wp)
@@ -260,7 +251,7 @@ contains
         cmat(2,1) = fact*nu
         cmat(2,2) = fact
         cmat(3,3) = fact*(1.0_wp-nu)/2.0_wp
-!        print*, 'C', cmat
+
         ! Compute element stress
         estress = matmul(cmat, estrain)
 		! Von mises stress
@@ -293,11 +284,7 @@ contains
         		(/ 1.0_wp, 0.0_wp, 0.0_wp, 0.0_wp, &         
                    0.0_wp, 0.0_wp, 0.0_wp, 1.0_wp, &       
                    0.0_wp, 1.0_wp, 1.0_wp, 0.0_wp  /) )
-		!print*, 'xe', xe
-		!	jac(1,1) = 0.25*((1+eta)*xe(1)+(1-eta)*xe(3)+(-1+eta)*xe(5)+(-1-eta)*xe(7))
-         !   jac(1,2) = 0.25*((1+eta)*xe(2)+(1.0-eta)*xe(4)+(-1.0+eta)*xe(6)+(-1.0-eta)*xe(8))
-         
-            
+      
         jac(1,1) = 0.25_wp*((eta-1.0_wp)*xe(1)+(1.0_wp-eta)*xe(3)+(1.0_wp+eta)*xe(5)-(1.0_wp+eta)*xe(7))
         jac(1,2) = 0.25_wp*((eta-1.0_wp)*xe(2)+(1.0_wp-eta)*xe(4)+(1.0_wp+eta)*xe(6)-(1.0_wp+eta)*xe(8))
         jac(2,1) = 0.25_wp*((xi-1.0_wp)*xe(1)-(1.0_wp+xi)*xe(3)+(1.0_wp+xi)*xe(5)+(1.0_wp-xi)*xe(7))
@@ -307,12 +294,10 @@ contains
 
         
         
-      gamma = reshape( shape=(/ 2, 2 /), order=(/ 2, 1 /), source= & 
+        gamma = reshape( shape=(/ 2, 2 /), order=(/ 2, 1 /), source= & 
         		(/ jac(2,2)/detjac, -jac(1,2)/detjac, &         
                    -jac(2,1)/detjac, jac(1,1)/detjac /) ) 
-!        print*, 'jac', jac
-!        print*, 'gamma', gamma
-!        print*, 'Xe', xe
+
 		gamma_bar = reshape( shape=(/ 4, 4 /), order=(/ 2, 1 /), source= & 
         		(/ gamma(1,1), gamma(1,2), 0.0_wp, 0.0_wp, &         
                    gamma(2,1), gamma(2,2), 0.0_wp, 0.0_wp, &  
@@ -336,17 +321,6 @@ contains
         n(:,:) = 0.25_wp * n(:,:)
         bmat = matmul(L, matmul(gamma_bar, n_bar))
 
-        !print*, 'gamma(1,1) =', gamma(1,1)
-		!print*, 'eta', eta
-        !print*, 'xi', xi
-        !print*, 'xe', xe
-        !print*, 'jac', jac
-		!print*, 'n_bar', n_bar
-        !print*, 'bmat', bmat
-        !print *, 'gamma', gamma
-        !print *, 'detjac ', detjac
-          
-        !pause         
     end subroutine shape
 
 end module plane42

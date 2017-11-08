@@ -5,7 +5,7 @@ module fea
     implicit none
     save
     private
-    public :: displ, initial, buildload, buildstiff, enforce, recover
+    public :: displ, initial, buildload, buildstiff, enforce, recover, mmul, eigen
 
 contains
 
@@ -110,8 +110,7 @@ contains
 
             end if
         end do
-        !print *, 'stress', stress
-        !print *, 'Displacement last node', d(neqn - 1),d(neqn)
+
         call plot( elements, eval=plotval, title="Stress", legend=.true. )
         
 		! Von mises stress
@@ -120,29 +119,6 @@ contains
                 von_mises(e) = sqrt(stress(e,1)**2 + stress(e,2)**2 - stress(e,1)*stress(e,2) + 3*stress(e,3)**2)
         
         end do
-        !call plot( elements, eval=von_mises, title="Von Mises Stress", legend=.true. )
-        ! Compute principal stress and direction
-        !do e=1,ne
-        !  principal_stress(e,1) = 0.5*(stress(e,1)+stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
-        !  principal_stress(e,2) = 0.5*(stress(e,1)-stress(e,2))* sqrt( ( 0.5*(stress(e,1)+stress(e,2)))**2 + (0.5*stress(e,3))**2) 
-        !  bcos = (stress(e,1)-stress(e,2))/(principal_stress(e,1)-principal_stress(e,2))
-           
-         ! principal_stress(e,3) = 0.5 * atan2( bcos , - 2*stress(e,3)/(principal_stress(e,1)-principal_stress(e,2)))
-          
-          !plotval(e) = principal_stress(e,3)
-        !end do
-        !call plot( elements, eval=plotval, title="Principal Stress 3", legend=.true. )
-        
-
-			! Ex 6.3 - compliance
-            !open (unit=out_unit,file="results.txt",Access = 'append',Status='old')
-  			!print *, "Element number - compliance  - A VM stress - B VM stress"
-            !e = INT(sqrt(ne*1.0/5))
-			!print *, ne, d(neqn)/(3*0.25*5), von_mises( e), von_mises(e**2+e), 
-            !write(out_unit, *) ne, sum(d*p), von_mises(e), von_mises(e**2+e), principal_stress(e,1), principal_stress(e,2), &
-            !  principal_stress(e**2+e, 1), principal_stress(e**2+e, 2)
-            !close (out_unit)
-            !print * , "Displacement last node = ", d(neqn)
    end subroutine displ
 !
 !--------------------------------------------------------------------------------------------------
@@ -159,7 +135,7 @@ contains
         integer, dimension(mdim) :: edof
         real(wp), dimension(mdim) :: xe
         real(wp), dimension(mdim) :: re
-        real(wp) ::  thk, fe
+        real(wp) ::  thk, fe, dens
 
         ! Build load vector
         p(1:neqn) = 0
@@ -171,13 +147,11 @@ contains
                               
             case( 2 )
             	! Build uniformly distributed surface (pressure) load contribution
-                !print *, 'ERROR in fea/buildload'
-                !print *, 'Distributed loads not defined -- you need to add your own code here'
-                !stop
                 e     = loads(i, 2)
                 eface = loads(i, 3)
                 fe	  = loads(i, 4)
 				thk   = mprop(element(e)%mat)%thk
+                dens   = mprop(element(e)%mat)%dens
                 xe    = 0
                 edof  = 0 
             do j = 1, element(i)%numnode
@@ -187,7 +161,7 @@ contains
                  edof(2*j)   = 2 * element(e)%ix(j)
             end do
                 
-            call plane42_re(xe, eface, fe, thk, re)
+            call plane42_re(xe, eface, fe, thk, dens, re)
                 
 			do j=1,8 !allocate the loads in {re} onto the {p} vector
             	p(edof(j)) = p(edof(j)) + re(j);
@@ -199,7 +173,6 @@ contains
                 stop
             end select
         end do
-        !print *, 'loads', P
     end subroutine buildload
 !
 !--------------------------------------------------------------------------------------------------
@@ -221,7 +194,7 @@ contains
         real(wp), dimension(mdim) :: xe
         real(wp), dimension(mdim, mdim) :: ke 
 ! Hint for modal analysis:
-!        real(wp), dimension(mdim, mdim) :: me 
+        real(wp), dimension(mdim, mdim) :: me 
         real(wp) :: young, area 
 ! Hint for modal analysis and continuum elements:
         real(wp) :: nu, dens, thk
@@ -230,10 +203,6 @@ contains
         if (.not. banded) then
             kmat = 0
         else
-            !print*,'ERROR in fea/buildstiff'
-            !print*,'Band form not implemented -- you need to add your own code here'
-            !stop
-
 			kmat = 0
             
         end if
@@ -259,10 +228,8 @@ contains
 				 young = mprop(element(e)%mat)%young
                  nu = mprop(element(e)%mat)%nu
                  thk = mprop(element(e)%mat)%thk
-            	 call plane42_ke(xe, young, nu, thk, ke)
- 				print *, 'elem ', e
-                print *, 'xe', xe
-				print *, 'ke', ke
+                 dens = mprop(element(e)%mat)%dens
+            	 call plane42_ke(xe, young, nu, thk, dens, ke, me)
 
             end select
 
@@ -276,9 +243,6 @@ contains
 
 ! Hint: Can you eliminate the loops above by using a different Fortran array syntax?
             else
-                !print *, 'ERROR in fea/buildstiff'
-                !print *, 'Band form not implemented -- you need to add our own code here'
-                !stop
 				do i = 1, 2*nen
                     do j = 1, 2*nen
                       if (  (  (edof(i)+1-edof(j)) <= bw) .AND. (  (edof(i)+1-edof(j)) > 0 )) then                        
@@ -286,18 +250,9 @@ contains
                       end if
                     end do
             	end do
-
-                !do i = 1,bw
-                !  print '(24(f4.2,tr1))', kmat(i,1:neqn)
-                !end do
-                !pause
-
-
                 
             end if 
         end do
-
-        !print*, 'kmat', kmat
         
     end subroutine buildstiff
 !
@@ -316,21 +271,13 @@ contains
                 
         if (.not. banded) then
             if (.not. penalty) then
-              !print '(24(f6.2,tr1))', kmat
-              
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
                     p(1:neqn) = p(1:neqn) - kmat(1:neqn, idof) * bound(i, 3)
-                    !print *, 'kmat', kmat(10, idof)
                     p(idof) = bound(i, 3)
                     kmat(1:neqn, idof) = 0.0_wp
                     kmat(idof, 1:neqn) = 0.0_wp
                     kmat(idof, idof) = 1.0_wp
-					!print *, 'i = ', i
-                    
-					!print *, 'bound   ', bound(i,3), '   kmat= ', kmat(10, idof)
-                    
-
                 end do
             else
                 penal = penalty_fac*maxval(kmat)
@@ -344,15 +291,12 @@ contains
             if (.not. penalty) then
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
-                    !print *, kmat(9,2)
                     do ii = 1, neqn
                       
                       if (( ii > idof -bw) .AND. (ii < idof) ) then
                     	p( ii ) = p(ii) - kmat(idof-ii + 1 , ii) * bound(i,3) 
-                        !print *, 'Upper area - other indice = ',   idof-ii + 1 ,'ii = ', ii                	  
 					  elseif ((ii >= idof) .AND. (ii < idof+bw) ) then
                       	p(ii)   = p(ii) - kmat( ii-idof +1   , idof) * bound(i,3)
-                        !print *, 'Lower area - other indice = ',   ii - idof + 1,  '  idof = ', idof, 
                       end if
 					end do
 
@@ -375,10 +319,7 @@ contains
                 end do  
             end if
         end if
-				
-                !print '(f6.2,tr1)', p
-                
-                
+               
     end subroutine enforce
 !
 !--------------------------------------------------------------------------------------------------
@@ -396,8 +337,9 @@ contains
         integer :: edof(mdim)
         real(wp), dimension(mdim) :: xe, de
         real(wp), dimension(mdim, mdim) :: ke
+        real(wp), dimension(mdim, mdim) :: me
         real(wp) :: young, area 
-! Hint for continuum elements:
+		! Hint for continuum elements:
         real(wp):: nu, dens, thk
         real(wp), dimension(3) :: estrain, estress
 
@@ -431,7 +373,8 @@ contains
 				young = mprop(element(e)%mat)%young
                 nu = mprop(element(e)%mat)%nu
                 thk  = mprop(element(e)%mat)%thk
-                call plane42_ke(xe, young, nu, thk, ke)
+                dens  = mprop(element(e)%mat)%dens
+                call plane42_ke(xe, young, nu, thk, dens, ke, me)
                 
                 p(edof(1:2*nen)) = p(edof(1:2*nen)) + matmul(ke(1:2*nen,1:2*nen), de(1:2*nen))
 
@@ -442,5 +385,148 @@ contains
             end select
         end do
     end subroutine recover
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine mmul(invector, outvector)
+        !! This subroutine builds the mass matrix and the eigenvector
 
+        use fedata
+        use link1
+        use plane42
+
+		real(wp), dimension(mdim), intent(in) :: invector
+		real(wp), dimension(neqn), intent(out) :: outvector
+        
+        integer :: e, i, j
+        integer :: nen 
+! Hint for system matrix in band form:
+        integer :: irow, icol
+        integer, dimension(mdim) :: edof
+        real(wp), dimension(mdim) :: xe
+        real(wp), dimension(mdim, mdim) :: ke 
+! Hint for modal analysis:
+        real(wp), dimension(mdim, mdim) :: me 
+        real(wp) :: young, area 
+! Hint for modal analysis and continuum elements:
+        real(wp) :: nu, dens, thk
+        
+        do e = 1, ne
+
+            ! Find coordinates and degrees of freedom
+            nen = element(e)%numnode
+            do i = 1, nen
+                 xe(2*i-1) = x(element(e)%ix(i),1)
+                 xe(2*i  ) = x(element(e)%ix(i),2)
+                 edof(2*i-1) = 2 * element(e)%ix(i) - 1  
+                 edof(2*i)   = 2 * element(e)%ix(i)
+            end do
+
+            ! Gather material properties and find element stiffness matrix
+            select case( element(e)%id )
+            case( 1 )
+            	print*, 'Not implemented for truss structures'
+                stop
+            case( 2 )
+				 dens = mprop(element(e)%mat)%dens
+                 thk = mprop(element(e)%mat)%thk
+                 nu = mprop(element(e)%mat)%nu
+                 young = mprop(element(e)%mat)%young
+            	 call plane42_ke(xe, young, nu, thk, dens, ke, me)
+
+            end select
+
+            do i = 1, mdim
+              outvector(edof(i)) = 0
+              do j = 1, mdim
+				outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j))
+			  end do
+            end do  
+
+        end do
+    end subroutine mmul
+
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine eigen
+
+        !! This subroutine calculates displacements
+
+        use fedata
+        use numeth
+        use processor
+
+        integer :: e, i, idof
+        real(wp), dimension(:), allocatable :: plotval
+		!real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
+		integer, parameter :: out_unit=20, p_max=10000
+        real(wp), parameter :: epsilon = 10**(-12)
+		real(wp) :: rp, lambda
+        real(wp), dimension(neqn) :: eigen_vector, eigen_vector_p_1, y_vector, y_vector_p_1
+        
+        ! Build load-vector
+        call buildload
+
+        ! Build stiffness matrix
+        call buildstiff
+
+        ! Remove rigid body modes
+        call enforce
+
+        if (.not. banded) then
+            ! Factor stiffness matrix      
+            call factor(kmat)
+            ! Solve for displacement vector
+            !call solve(kmat, p)
+        else
+          call bfactor(kmat)
+          !call bsolve(kmat, p)
+        
+        end if
+		
+		eigen_vector = 1.0_wp
+        do i = 1, nb
+        	idof = int(2 * (bound(i,1)-1) + bound(i,2))
+        	eigen_vector(idof) = bound(i, 3)
+        end do
+
+		call mmul(eigen_vector, y_vector)
+        eigen_vector_p_1 = eigen_vector
+
+        do i = 1,p_max
+          ! Solve KX = Y
+			if (.not. banded) then
+            	call solve(kmat, y_vector)
+        	else
+          		call bsolve(kmat, y_vector)
+        	end if
+
+            ! Transfer results
+            eigen_vector(1:neqn) = y_vector(1:neqn)
+
+			! Compute new Y
+            call mmul(eigen_vector, y_vector)
+
+            ! Compute rp
+            rp = sqrt(dot_product(eigen_vector, y_vector)) 
+            y_vector = y_vector / rp
+
+            if ((sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
+              / sqrt(dot_product(eigen_vector, eigen_vector))) < epsilon) then
+              exit
+			end if
+            
+			eigen_vector_p_1 = eigen_vector
+            y_vector_p_1 = y_vector
+        end do
+        
+		d = eigen_vector / rp
+        lambda = dot_product(eigen_vector, y_vector_p_1) / rp**2 
+		
+		print*, 'shoud be plotting'
+		call plot(1, eigenfreq=lambda, eigenvector=d)
+        
+   end subroutine eigen
+       
 end module fea

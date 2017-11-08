@@ -47,4 +47,7 @@ F,       10,FX,     .00500000000
 F,       11,FX,     .01000000000
 F,       12,FX,     .00500000000
 ! Define surface load conditions: SFE, element #, face #, PRES, 0, value
+
+/SOLU
+antype, modal
 FINISH

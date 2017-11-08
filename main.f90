@@ -16,7 +16,11 @@ program main
     call initial
 
     ! Calculate displacements
-    call displ
+    if (antype == 'static') then
+    	call displ
+    elseif (antype == 'modal') then
+    	call eigen
+    end if
     
     ! Close plot window(s)
     call plot( done )
