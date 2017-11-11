@@ -11,7 +11,7 @@ program main
 	!call stopwatch('star')
     ! Read model data
     call input
-	
+
     ! Initialize problem
     call initial
 
@@ -21,7 +21,7 @@ program main
     elseif (antype == 'modal') then
     	call eigen
     end if
-    
+
     ! Close plot window(s)
     call plot( done )
    

@@ -226,6 +226,7 @@ contains
                  call link1_ke(xe, young, area, ke)
             case( 2 )
 				 young = mprop(element(e)%mat)%young
+                 
                  nu = mprop(element(e)%mat)%nu
                  thk = mprop(element(e)%mat)%thk
                  dens = mprop(element(e)%mat)%dens
@@ -253,7 +254,8 @@ contains
                 
             end if 
         end do
-        
+        print*, 'E  =', young
+        print*, 'rho  =', dens
     end subroutine buildstiff
 !
 !--------------------------------------------------------------------------------------------------
@@ -371,6 +373,7 @@ contains
                 strain(e, 1:3) = estrain
             case( 2 )
 				young = mprop(element(e)%mat)%young
+                
                 nu = mprop(element(e)%mat)%nu
                 thk  = mprop(element(e)%mat)%thk
                 dens  = mprop(element(e)%mat)%dens
@@ -395,7 +398,7 @@ contains
         use link1
         use plane42
 
-		real(wp), dimension(mdim), intent(in) :: invector
+		real(wp), dimension(neqn), intent(in) :: invector
 		real(wp), dimension(neqn), intent(out) :: outvector
         
         integer :: e, i, j
@@ -410,7 +413,7 @@ contains
         real(wp) :: young, area 
 ! Hint for modal analysis and continuum elements:
         real(wp) :: nu, dens, thk
-        
+        outvector=0.0_wp
         do e = 1, ne
 
             ! Find coordinates and degrees of freedom
@@ -432,18 +435,21 @@ contains
                  thk = mprop(element(e)%mat)%thk
                  nu = mprop(element(e)%mat)%nu
                  young = mprop(element(e)%mat)%young
+                 
             	 call plane42_ke(xe, young, nu, thk, dens, ke, me)
-
+				!print *, 'me =', sum(me)
             end select
-
+			
             do i = 1, mdim
-              outvector(edof(i)) = 0
+              
               do j = 1, mdim
+                
 				outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j))
 			  end do
             end do  
-
         end do
+
+        
     end subroutine mmul
 
 !
@@ -457,11 +463,12 @@ contains
         use numeth
         use processor
 
-        integer :: e, i, idof
+        integer :: e, i, j,idof
         real(wp), dimension(:), allocatable :: plotval
 		!real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
-		integer, parameter :: out_unit=20, p_max=10000
-        real(wp), parameter :: epsilon = 10**(-12)
+		integer, parameter :: p_max=1000
+        real(dp), parameter :: epsilon = 10.0**(-15)
+        logical :: error
 		real(wp) :: rp, lambda
         real(wp), dimension(neqn) :: eigen_vector, eigen_vector_p_1, y_vector, y_vector_p_1
         
@@ -473,60 +480,72 @@ contains
 
         ! Remove rigid body modes
         call enforce
-
+		!print *, 'kmat =', kmat
         if (.not. banded) then
             ! Factor stiffness matrix      
             call factor(kmat)
-            ! Solve for displacement vector
-            !call solve(kmat, p)
         else
           call bfactor(kmat)
-          !call bsolve(kmat, p)
-        
         end if
 		
-		eigen_vector = 1.0_wp
+		eigen_vector = 0.5*1.0_wp
+        
         do i = 1, nb
         	idof = int(2 * (bound(i,1)-1) + bound(i,2))
         	eigen_vector(idof) = bound(i, 3)
         end do
 
 		call mmul(eigen_vector, y_vector)
-        eigen_vector_p_1 = eigen_vector
+       
+        do j = 1,p_max
 
-        do i = 1,p_max
+            eigen_vector_p_1 = eigen_vector
+            y_vector_p_1 = y_vector
           ! Solve KX = Y
 			if (.not. banded) then
             	call solve(kmat, y_vector)
         	else
           		call bsolve(kmat, y_vector)
         	end if
-
+		      
             ! Transfer results
             eigen_vector(1:neqn) = y_vector(1:neqn)
-
+            
+			! Boundary conditions
+        	!do i = 1, nb
+        	!	idof = int(2 * (bound(i,1)-1) + bound(i,2))
+        	!	eigen_vector(idof) = bound(i, 3)
+        	!end do
+            
 			! Compute new Y
             call mmul(eigen_vector, y_vector)
 
             ! Compute rp
             rp = sqrt(dot_product(eigen_vector, y_vector)) 
             y_vector = y_vector / rp
-
-            if ((sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
-              / sqrt(dot_product(eigen_vector, eigen_vector))) < epsilon) then
+			
+            error = ((sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
+              / sqrt(dot_product(eigen_vector, eigen_vector))) < epsilon)
+            
+            
+			if (error) then
+              print *, 'convergence eigen'
               exit
 			end if
             
-			eigen_vector_p_1 = eigen_vector
-            y_vector_p_1 = y_vector
+			
+            
         end do
-        
+        print *, 'Error on delta eigen', (sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
+              / sqrt(dot_product(eigen_vector, eigen_vector)))*10**12
 		d = eigen_vector / rp
         lambda = dot_product(eigen_vector, y_vector_p_1) / rp**2 
 		
-		print*, 'shoud be plotting'
-		call plot(1, eigenfreq=lambda, eigenvector=d)
+		print*, 'omega  =', sqrt(lambda)
         
+		!call plot(2, eigenfreq=lambda, eigenvector=d)
+        call plot( what = 16, eigenfreq=lambda, eigenvector=d, tend =20.d0)
+		!call plot(what='eigenmode','xwin', 'color','',(/lambda/), d(1:neqn), (/1000.d0, 2.d0/)) 
    end subroutine eigen
        
 end module fea

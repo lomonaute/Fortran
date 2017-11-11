@@ -242,8 +242,7 @@ contains
 
         ! Compute element strain
         estrain = matmul(bmat, de)
-
-        ! Build constitutive matrix (plane stress)
+      ! Build constitutive matrix (plane stress)
         cmat = 0
 		fact = young / (1.0_wp - nu**2.0_wp)
 		cmat(1,1) = fact
