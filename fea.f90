@@ -532,9 +532,7 @@ contains
               print *, 'convergence eigen'
               exit
 			end if
-            
-			
-            
+               
         end do
         print *, 'Error on delta eigen', (sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
               / sqrt(dot_product(eigen_vector, eigen_vector)))*10**12
@@ -547,5 +545,244 @@ contains
         call plot( what = 16, eigenfreq=lambda, eigenvector=d, tend =20.d0)
 		!call plot(what='eigenmode','xwin', 'color','',(/lambda/), d(1:neqn), (/1000.d0, 2.d0/)) 
    end subroutine eigen
-       
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine trans_loading
+
+        !! This subroutine calculates displacements under transient loading
+
+        use fedata
+        use numeth
+        use processor
+
+        integer :: e
+        real(wp), dimension(:), allocatable :: plotval
+		real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
+		integer, parameter :: out_unit=20
+        
+        ! Build stiffness matrix
+        call buildstiff
+
+        ! Remove rigid body modes
+        call enforce_k
+
+        if (.not. banded) then
+            ! Factor stiffness matrix
+              print *,'p', p        
+            call factor(kmat)
+        else
+          print *,'p', p  
+          call bfactor(kmat)
+
+		! transient
+        do t = 1, t_end
+        	! Build load-vector
+        	call trans_load
+
+        end do
+
+        if (.not. banded) then
+            ! Factor stiffness matrix
+              print *,'p', p        
+            call factor(kmat)
+            ! Solve for displacement vector
+            call solve(kmat, p)
+        else
+          print *,'p', p  
+          call bfactor(kmat)
+          call bsolve(kmat, p)
+
+          
+        end if
+
+        ! Transfer results
+        d(1:neqn) = p(1:neqn)
+        
+        ! Recover stress
+        call recover
+                
+        ! Output results
+        call output
+		!call stopwatch('stop')
+        ! Plot deformed shape
+        call plot( undeformed + deformed )
+
+        ! Plot element values
+        allocate (plotval(ne))
+        print*, 'de', d
+        do e = 1, ne
+            if (element(e)%id == 1) then
+                plotval(e) = stress(e,1)
+            else if (element(e)%id == 2) then
+                
+                plotval(e) = stress(e,1)
+
+            end if
+        end do
+
+        call plot( elements, eval=plotval, title="Stress", legend=.true. )
+        
+        end do
+   end subroutine trans_loading
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine enforce_p
+
+        !! This subroutine enforces the support boundary conditions
+
+        use fedata
+
+        integer :: i, ii, idof
+        real(wp) :: penal
+
+        ! Correct for supports
+                
+        if (.not. banded) then
+            if (.not. penalty) then
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    p(1:neqn) = p(1:neqn) - kmat(1:neqn, idof) * bound(i, 3)
+                    p(idof) = bound(i, 3)
+                end do
+            else
+                penal = penalty_fac*maxval(kmat)
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    p(idof) = penal * bound(i, 3)  
+                end do  
+            end if
+        else
+            if (.not. penalty) then
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    do ii = 1, neqn
+                      
+                      if (( ii > idof -bw) .AND. (ii < idof) ) then
+                    	p( ii ) = p(ii) - kmat(idof-ii + 1 , ii) * bound(i,3) 
+					  elseif ((ii >= idof) .AND. (ii < idof+bw) ) then
+                      	p(ii)   = p(ii) - kmat( ii-idof +1   , idof) * bound(i,3)
+                      end if
+					end do
+
+                    p(idof) = bound(i, 3)
+!$$$$$$                     idof = int(2*(bound(i,1)-1) + bound(i,2)) 
+                end do
+            else
+                penal = penalty_fac*maxval(kmat)
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    p(idof) = penal * bound(i, 3)  
+                end do  
+            end if
+        end if
+               
+    end subroutine enforce_p
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine enforce_k
+
+        !! This subroutine enforces the support boundary conditions
+
+        use fedata
+
+        integer :: i, ii, idof
+        real(wp) :: penal
+
+        ! Correct for supports
+                
+        if (.not. banded) then
+            if (.not. penalty) then
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    kmat(1:neqn, idof) = 0.0_wp
+                    kmat(idof, 1:neqn) = 0.0_wp
+                    kmat(idof, idof) = 1.0_wp
+                end do
+            else
+                penal = penalty_fac*maxval(kmat)
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    kmat(idof, idof) = kmat(idof, idof) + penal
+                end do  
+            end if
+        else
+            if (.not. penalty) then
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))  
+                    kmat(1:bw, idof) = 0.0_wp
+                    do ii=1,bw
+                      if (idof-ii+1 >= 1) then
+                    	kmat(ii, idof-ii+1) = 0.0_wp
+                      end if
+                    end do
+                    kmat(1, idof) = 1.0_wp
+                end do
+            else
+                penal = penalty_fac*maxval(kmat)
+                do i = 1, nb
+                    idof = int(2*(bound(i,1)-1) + bound(i,2))
+                    kmat(1, idof) = kmat(1, idof) + penal
+                end do  
+            end if
+        end if
+               
+    end subroutine enforce_k
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine trans_load
+
+        !! This subroutine builds the global load vector
+
+        use fedata
+        use plane42
+
+        integer :: i, e, j, eface
+! Hint for continuum elements:
+        integer, dimension(mdim) :: edof
+        real(wp), dimension(mdim) :: xe
+        real(wp), dimension(mdim) :: re
+        real(wp) ::  thk, fe, dens
+
+        ! Build load vector
+        p(1:neqn) = 0
+        do i = 1, np            
+!$$$$$$             select case(int(loads(i, 1)))
+!$$$$$$             case( 1 )
+!$$$$$$                 ! Build nodal load contribution
+!$$$$$$                 p(int(2*loads(i,2)-2+loads(i,3))) = loads(i,4)
+!$$$$$$                               
+!$$$$$$             case( 2 )
+            	! Build uniformly distributed surface (pressure) load contribution
+                e     = loads(i, 2)
+                eface = loads(i, 3)
+                fe	  = loads(i, 4)
+				thk   = mprop(element(e)%mat)%thk
+                dens   = mprop(element(e)%mat)%dens
+                xe    = 0
+                edof  = 0 
+            do j = 1, element(i)%numnode
+                 xe(2*j-1) = x(element(e)%ix(j),1)
+                 xe(2*j  ) = x(element(e)%ix(j),2)
+                 edof(2*j-1) = 2 * element(e)%ix(j) - 1
+                 edof(2*j)   = 2 * element(e)%ix(j)
+            end do
+                
+            call plane42_tur_blade(xe, eface, fe, thk, dens, re)
+                
+			do j=1,8 !allocate the loads in {re} onto the {p} vector
+            	p(edof(j)) = re(j);
+            end do
+            
+!$$$$$$             case default
+!$$$$$$                 print *, 'ERROR in fea/buildload'
+!$$$$$$                 print *, 'Load type not known'
+!$$$$$$                 stop
+!$$$$$$             end select
+        end do
+    end subroutine trans_load
+    
 end module fea

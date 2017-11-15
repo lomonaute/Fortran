@@ -321,5 +321,80 @@ contains
         bmat = matmul(L, matmul(gamma_bar, n_bar))
 
     end subroutine shape
+!
+!--------------------------------------------------------------------------------------------------
+!
+    subroutine plane42_tur_blade(xe, eface, fe, thk, dens, re)
 
+        !! This subroutine computes the element load vector due
+        !! to surface traction (traction is always perpendicular
+        !! to element face).
+
+        integer, intent(in) :: eface
+            !! Element face where traction (pressure) is applied
+
+        real(wp), intent(in) :: fe
+            !! Value of surface traction (pressure)
+        real(wp), intent(in) :: thk, dens
+			!! nodal velocity vector
+        real(wp), intent(in) :: velo(8)
+            !! Thickness of this element
+        real(wp), dimension(:), intent(in) :: xe
+            !! Nodal coordinates of this element in undeformed configuration (see also [[plane42rect_ke]])
+        real(wp), intent(out) :: re(8)
+            !! Element force vector
+            !!
+            !! * `re(1:2)` = \((f_x^1, f_y^1)\) force at element node 1 in \(x\)- and y-direction
+            !! * `re(3:4)` = \((f_x^2, f_y^2)\) force at element node 1 in \(x\)- and y-direction
+            !! * etc...
+        real(wp) :: eta, xi, gaus_co(2), gaus_w
+        real(wp) :: jac(2,2), n(2,8), bmat(3,8), detjac
+        
+        integer :: i
+
+		gaus_w = 1.0_wp
+        gaus_co = (/ 1.0_wp/sqrt(3.0_wp), -1.0_wp/sqrt(3.0_wp) /)
+        re = 0
+        if (eface == 1) then
+          do i=1,2
+				eta = -1.0_wp
+                xi = gaus_co(i)
+				
+				call shape(xe, xi, eta, n, bmat, jac, detjac)
+				
+				re = re + gaus_w * thk * fe * matmul( transpose(n), (/ -jac(1,2), jac(1,1) /) )
+            end do
+            
+        elseif (eface == 2) then
+        	do i=1,2
+				eta = gaus_co(i)
+                xi = 1.0_wp
+				
+        		call shape(xe, xi, eta, n, bmat, jac, detjac)
+
+				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ -jac(2,2), jac(2,1) /) )
+            end do
+            
+        elseif (eface == 3) then
+ 			do i=1,2
+				eta = 1.0_wp
+                xi = gaus_co(i)
+				
+				call shape(xe, xi, eta, n, bmat, jac, detjac)
+				
+				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ jac(1,2), -jac(1,1) /) )
+            end do 
+        elseif (eface == 4) then
+			do i=1,2
+				eta = gaus_co(i)
+                xi = -1.0_wp
+                				
+        		call shape(xe, xi, eta, n, bmat, jac, detjac)
+                
+				re = re + gaus_w * thk * fe * matmul(transpose(n), (/ jac(2,2), -jac(2,1) /) )
+            end do  
+        endif
+        
+    end subroutine plane42_re
+    
 end module plane42
