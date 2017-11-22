@@ -71,12 +71,12 @@ el_num = [el_num_lower'; el_num_upper'];
 faces = [ones(ne_x, 1); 3 * ones(ne_x, 1)];
 % value
 pres_val = (x_vec(1:end-1) + x_vec(2:end))/2;  % value is equal to the length to the rotation axis
-pres_val = [pres_val'; pres_val'];
+pres_val = [pres_val'; -pres_val']/1000;
 
-format_pressure = 'SFE, %i, %i, %10.8f, 0, value \n';
+format_pressure = 'SFE, %i, %i, PRES, 0, %10.8f \n';
 fprintf(format_pressure, [el_num, faces, pres_val]')
 
-fprintf('\n\nFINISH \n\n')
+fprintf('FINISH \n\n')
 
 
 
