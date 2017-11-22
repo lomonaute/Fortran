@@ -20,6 +20,8 @@ program main
     	call displ
     elseif (antype == 'modal') then
     	call eigen
+    elseif (antype == 'trans') then
+    	call trans_loading_ccd
     end if
 
     ! Close plot window(s)

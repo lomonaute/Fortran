@@ -5,7 +5,8 @@ module fea
     implicit none
     save
     private
-    public :: displ, initial, buildload, buildstiff, enforce, recover, mmul, eigen
+    public :: displ, initial, buildload, buildstiff, enforce, recover, mmul, &
+    			eigen, trans_loading_ccd, enforce_p, enforce_k, build_trans_load
 
 contains
 
@@ -31,6 +32,8 @@ contains
 
         if (.not. banded) then
             allocate (kmat(neqn, neqn))
+            allocate (mmat(neqn, neqn))
+            allocate (left_side (neqn, neqn))
         else
             bw = 0 
 			do e=1,ne
@@ -38,6 +41,8 @@ contains
                 
             end do
             allocate (kmat(bw,neqn))
+            allocate (mmat(bw,neqn))
+            allocate (left_side (bw, neqn))
             
         end if
         allocate (p(neqn), d(neqn))
@@ -112,12 +117,11 @@ contains
         end do
 
         call plot( elements, eval=plotval, title="Stress", legend=.true. )
+        print*, 'loop'
         
 		! Von mises stress
         do e= 1, ne
-          
-                von_mises(e) = sqrt(stress(e,1)**2 + stress(e,2)**2 - stress(e,1)*stress(e,2) + 3*stress(e,3)**2)
-        
+			von_mises(e) = sqrt(stress(e,1)**2 + stress(e,2)**2 - stress(e,1)*stress(e,2) + 3*stress(e,3)**2)
         end do
    end subroutine displ
 !
@@ -199,13 +203,8 @@ contains
 ! Hint for modal analysis and continuum elements:
         real(wp) :: nu, dens, thk
 
-        ! Reset stiffness matrix
-        if (.not. banded) then
-            kmat = 0
-        else
-			kmat = 0
-            
-        end if
+        kmat = 0
+        mmat = 0
 
         do e = 1, ne
           
@@ -238,6 +237,7 @@ contains
             if (.not. banded) then
                 do i = 1, 2*nen
                     do j = 1, 2*nen
+                      	mmat(edof(i), edof(j)) = mmat(edof(i), edof(j)) + me(i, j)
                         kmat(edof(i), edof(j)) = kmat(edof(i), edof(j)) + ke(i, j)
                     end do
                 end do
@@ -247,6 +247,7 @@ contains
 				do i = 1, 2*nen
                     do j = 1, 2*nen
                       if (  (  (edof(i)+1-edof(j)) <= bw) .AND. (  (edof(i)+1-edof(j)) > 0 )) then                        
+                        mmat(edof(i)+1 -edof(j), edof(j)) = mmat(edof(i)+1 -edof(j), edof(j)) + me(i, j)
                         kmat(edof(i)+1 -edof(j), edof(j)) = kmat(edof(i)+1 -edof(j), edof(j)) + ke(i, j)
                       end if
                     end do
@@ -391,7 +392,7 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine mmul(invector, outvector)
+ subroutine mmul(invector, outvector, mtype)
         !! This subroutine builds the mass matrix and the eigenvector
 
         use fedata
@@ -399,6 +400,7 @@ contains
         use plane42
 
 		real(wp), dimension(neqn), intent(in) :: invector
+        integer, intent(in) :: mtype
 		real(wp), dimension(neqn), intent(out) :: outvector
         
         integer :: e, i, j
@@ -431,24 +433,33 @@ contains
             	print*, 'Not implemented for truss structures'
                 stop
             case( 2 )
-				 dens = mprop(element(e)%mat)%dens
+				dens = mprop(element(e)%mat)%dens
                  thk = mprop(element(e)%mat)%thk
                  nu = mprop(element(e)%mat)%nu
                  young = mprop(element(e)%mat)%young
                  
-            	 call plane42_ke(xe, young, nu, thk, dens, ke, me)
-				!print *, 'me =', sum(me)
+            	call plane42_ke(xe, young, nu, thk, dens, ke, me)
             end select
 			
             do i = 1, mdim
               
               do j = 1, mdim
-                
-				outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j))
+                if (mtype == 1) then                
+					outvector(edof(i)) = outvector(edof(i)) + ke(i,j) * invector(edof(j))
+                	elseif (mtype == 2) then
+                	outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j))
+                	elseif (mtype == 3) then
+                    	print *, 'HRZ mass-lumping matrix not implemented yet'
+                    	stop
+                	outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j)) 
+                	else 
+                  		print*, 'Problem in mmul subroutine - wrong value for mtype :', mtype
+                    	stop
+                end if                        	
+
 			  end do
             end do  
         end do
-
         
     end subroutine mmul
 
@@ -495,7 +506,7 @@ contains
         	eigen_vector(idof) = bound(i, 3)
         end do
 
-		call mmul(eigen_vector, y_vector)
+		call mmul(eigen_vector, y_vector, 2)
        
         do j = 1,p_max
 
@@ -518,7 +529,7 @@ contains
         	!end do
             
 			! Compute new Y
-            call mmul(eigen_vector, y_vector)
+            call mmul(eigen_vector, y_vector, 2)
 
             ! Compute rp
             rp = sqrt(dot_product(eigen_vector, y_vector)) 
@@ -548,56 +559,100 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine trans_loading
+    subroutine trans_loading_ccd
 
-        !! This subroutine calculates displacements under transient loading
+        !! Classical Central Difference (CCD) method
 
         use fedata
         use numeth
         use processor
 
-        integer :: e
+        integer :: e, i, n_node
         real(wp), dimension(:), allocatable :: plotval
 		real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
-		integer, parameter :: out_unit=20
-        
+        real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_1(neqn), D_2dot_1(neqn)
+        real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn), int_vect_4(neqn)
+        real(wp) :: t, omega, transient_contribution
+        real(wp), parameter :: delta_t = 0.000001
+        real(wp), parameter :: alpha = 0
+        real(wp), parameter :: beta = 0
+        integer, parameter :: out_unit = 20
+        integer, parameter :: t_steps = 200
+        real(wp) :: storage(6,t_steps)
+		
+		n_node = neqn / 2 - 2
+        t = 0
+        omega = pi
+        transient_contribution = 0.25
+
         ! Build stiffness matrix
         call buildstiff
+        call buildload
 
         ! Remove rigid body modes
-        call enforce_k
+        call enforce
 
-        if (.not. banded) then
-            ! Factor stiffness matrix
-              print *,'p', p        
+        if (.not. banded) then  
+        	call factor(mmat)
             call factor(kmat)
-        else
-          print *,'p', p  
-          call bfactor(kmat)
-
-		! transient
-        do t = 1, t_end
-        	! Build load-vector
-        	call trans_load
-
-        end do
-
-        if (.not. banded) then
-            ! Factor stiffness matrix
-              print *,'p', p        
-            call factor(kmat)
-            ! Solve for displacement vector
             call solve(kmat, p)
         else
-          print *,'p', p  
-          call bfactor(kmat)
-          call bsolve(kmat, p)
-
-          
+        	call bfactor(mmat)
+            call bfactor(kmat)
+            call bsolve(kmat, p)
         end if
+		
+		D_n_1 = p
+        D_n_2 = p
+        D_dot_1 = 0
+        D_2dot_1 = 0 
 
-        ! Transfer results
-        d(1:neqn) = p(1:neqn)
+		! transient
+        do i = 1, t_steps
+        	t = i * delta_t
+        	! Build load-vector
+        	call build_trans_load(t, omega, transient_contribution, p)
+            call enforce_p
+
+            call mmul(D_n_1, int_vect_1, 1)
+            call mmul(D_n_1, int_vect_2, 2)
+            call mmul(D_n_2, int_vect_3, 2)
+            call mmul(D_n_2, int_vect_4, 1)
+            
+			D = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
+            	+ ((alpha * int_vect_3) + (beta * int_vect_4)) / (2.0_wp * delta_t)
+
+            if (.not. banded) then
+              	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
+                call factor(left_side)
+            	call solve(left_side, D)
+        	else
+            	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
+          		call bfactor(left_side)
+                !print*, 'left_side', left_side
+                print*, 'D', D
+                print*, 'size D', size(D)
+        		print*, 'size left_side', size(left_side)
+                call bsolve(left_side, D)
+            end if
+            
+			D_dot_1 = 0.5_wp * (D - D_n_2) / delta_t
+            D_2dot_1 = (D - 2.0_wp * D_n_1 + D_n_2) / delta_t**2
+
+            storage(1, i) = D(2 * n_node - 1)
+            storage(2, i) = D(2 * n_node)
+            storage(3, i) = D_dot_1(2 * n_node - 1)
+            storage(4, i) = D_dot_1(2 * n_node)
+            storage(5, i) = D_2dot_1(2 * n_node - 1)
+            storage(6, i) = D_2dot_1(2 * n_node)
+
+			D_n_2 = D_n_1
+        	D_n_1 = D
+            
+        end do
+
+!$$$$$$         ! Transfer results
+!$$$$$$         d(1:neqn) = p(1:neqn)
         
         ! Recover stress
         call recover
@@ -620,11 +675,11 @@ contains
 
             end if
         end do
+		
+		print*, 'storage', storage
+!        call plot( elements, eval=plotval, title="Stress", legend=.true. )
 
-        call plot( elements, eval=plotval, title="Stress", legend=.true. )
-        
-        end do
-   end subroutine trans_loading
+   end subroutine trans_loading_ccd
 !
 !--------------------------------------------------------------------------------------------------
 !
@@ -733,7 +788,7 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine trans_load
+    subroutine build_trans_load(t, omega, transient_contribution, out_vector)
 
         !! This subroutine builds the global load vector
 
@@ -746,24 +801,20 @@ contains
         real(wp), dimension(mdim) :: xe
         real(wp), dimension(mdim) :: re
         real(wp) ::  thk, fe, dens
+        real(wp), intent(in) :: t, omega, transient_contribution
+        real(wp), intent(out) :: out_vector(1:neqn)
 
         ! Build load vector
-        p(1:neqn) = 0
+        out_vector(1:neqn) = 0
         do i = 1, np            
-!$$$$$$             select case(int(loads(i, 1)))
-!$$$$$$             case( 1 )
-!$$$$$$                 ! Build nodal load contribution
-!$$$$$$                 p(int(2*loads(i,2)-2+loads(i,3))) = loads(i,4)
-!$$$$$$                               
-!$$$$$$             case( 2 )
-            	! Build uniformly distributed surface (pressure) load contribution
-                e     = loads(i, 2)
-                eface = loads(i, 3)
-                fe	  = loads(i, 4)
-				thk   = mprop(element(e)%mat)%thk
-                dens   = mprop(element(e)%mat)%dens
-                xe    = 0
-                edof  = 0 
+            e     = loads(i, 2)
+            eface = loads(i, 3)
+            fe	  = loads(i, 4) * (1 + sin(t * omega) * transient_contribution)
+            thk   = mprop(element(e)%mat)%thk
+            dens   = mprop(element(e)%mat)%dens
+            xe    = 0
+            edof  = 0 
+            
             do j = 1, element(i)%numnode
                  xe(2*j-1) = x(element(e)%ix(j),1)
                  xe(2*j  ) = x(element(e)%ix(j),2)
@@ -774,15 +825,11 @@ contains
             call plane42_tur_blade(xe, eface, fe, thk, dens, re)
                 
 			do j=1,8 !allocate the loads in {re} onto the {p} vector
-            	p(edof(j)) = re(j);
-            end do
-            
-!$$$$$$             case default
-!$$$$$$                 print *, 'ERROR in fea/buildload'
-!$$$$$$                 print *, 'Load type not known'
-!$$$$$$                 stop
-!$$$$$$             end select
+            	out_vector(edof(j)) = re(j);
+      		end do
+
         end do
-    end subroutine trans_load
+
+    end subroutine build_trans_load
     
 end module fea

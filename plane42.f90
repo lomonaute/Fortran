@@ -26,7 +26,7 @@ module plane42
     save
     
     private
-    public :: plane42_ke, plane42_re, plane42_vo, plane42_ss, shape
+    public :: plane42_ke, plane42_re, plane42_vo, plane42_ss, shape, plane42_tur_blade
 
 contains
 
@@ -336,8 +336,8 @@ contains
         real(wp), intent(in) :: fe
             !! Value of surface traction (pressure)
         real(wp), intent(in) :: thk, dens
-			!! nodal velocity vector
-        real(wp), intent(in) :: velo(8)
+!$$$$$$             !! nodal velocity vector
+!$$$$$$         real(wp), intent(in) :: velo(8)
             !! Thickness of this element
         real(wp), dimension(:), intent(in) :: xe
             !! Nodal coordinates of this element in undeformed configuration (see also [[plane42rect_ke]])
@@ -395,6 +395,6 @@ contains
             end do  
         endif
         
-    end subroutine plane42_re
+    end subroutine plane42_tur_blade
     
 end module plane42

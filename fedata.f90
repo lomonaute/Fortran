@@ -108,6 +108,10 @@ module fedata
     ! Working arrays:
     real(wp), dimension(:,:), allocatable :: kmat
         !! Stiffness matrix
+    real(wp), dimension(:,:), allocatable :: mmat
+        !! Mass matrix
+    real(wp), dimension(:,:), allocatable :: left_side
+        !! Mass matrix
     real(wp), dimension(:,:), allocatable :: strain
         !! Strains at different places in the structure 
         !!
