@@ -460,6 +460,11 @@ contains
 			  end do
             end do  
         end do
+
+        !if (mtype ==1) then
+        !  write(1,*) sum(outvector), sum(invector)
+        !end if
+            
         
     end subroutine mmul
 
@@ -608,11 +613,16 @@ contains
         D_2dot_1 = 0 
 
 		! transient
+        open (unit = 1, file = "results.txt")
         do i = 1, t_steps
         	t = i * delta_t
         	! Build load-vector
         	call build_trans_load(t, omega, transient_contribution, p)
             call enforce_p
+
+            
+        	write(1,*) 't=', t
+            write(1,*) D
 
             call mmul(D_n_1, int_vect_1, 1)
             call mmul(D_n_1, int_vect_2, 2)
@@ -621,18 +631,18 @@ contains
             
 			D = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
             	+ ((alpha * int_vect_3) + (beta * int_vect_4)) / (2.0_wp * delta_t)
-
+				
             if (.not. banded) then
               	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
                 call factor(left_side)
-            	call solve(left_side, D)
+                call solve(left_side, D)
         	else
             	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
           		call bfactor(left_side)
                 !print*, 'left_side', left_side
-                print*, 'D', D
-                print*, 'size D', size(D)
-        		print*, 'size left_side', size(left_side)
+                !print*, 'D', D
+                !print*, 'size D', size(D)
+        		!print*, 'size left_side', size(left_side)
                 call bsolve(left_side, D)
             end if
             
@@ -650,10 +660,11 @@ contains
         	D_n_1 = D
             
         end do
-
-!$$$$$$         ! Transfer results
-!$$$$$$         d(1:neqn) = p(1:neqn)
+		
+		close(1)
         
+
+       
         ! Recover stress
         call recover
                 
@@ -806,15 +817,22 @@ contains
 
         ! Build load vector
         out_vector(1:neqn) = 0
+  		
         do i = 1, np            
-            e     = loads(i, 2)
-            eface = loads(i, 3)
-            fe	  = loads(i, 4) * (1 + sin(t * omega) * transient_contribution)
-            thk   = mprop(element(e)%mat)%thk
-            dens   = mprop(element(e)%mat)%dens
-            xe    = 0
-            edof  = 0 
-            
+            select case(int(loads(i, 1)))
+            case( 1 )
+            	! Build nodal load contribution
+                out_vector(int(2*loads(i,2)-2+loads(i,3))) = loads(i,4)* (1 + sin(t * omega) * transient_contribution)
+                              
+            case( 2 )
+            	! Build uniformly distributed surface (pressure) load contribution
+                e     = loads(i, 2)
+                eface = loads(i, 3)
+                fe	  = loads(i, 4) * (1 + sin(t * omega) * transient_contribution)
+				thk   = mprop(element(e)%mat)%thk
+                dens   = mprop(element(e)%mat)%dens
+                xe    = 0
+                edof  = 0 
             do j = 1, element(i)%numnode
                  xe(2*j-1) = x(element(e)%ix(j),1)
                  xe(2*j  ) = x(element(e)%ix(j),2)
@@ -825,11 +843,15 @@ contains
             call plane42_tur_blade(xe, eface, fe, thk, dens, re)
                 
 			do j=1,8 !allocate the loads in {re} onto the {p} vector
-            	out_vector(edof(j)) = re(j);
-      		end do
-
-        end do
-
+            	out_vector(edof(j)) = out_vector(edof(j)) + re(j);
+            end do
+            
+            case default
+                print *, 'ERROR in fea/buildload'
+                print *, 'Load type not known'
+                stop
+            end select
+        end do     
     end subroutine build_trans_load
     
 end module fea
