@@ -340,18 +340,18 @@ contains
                 read (10, *) command, rvalue, rvalue2
                 accel(1) = rvalue
                 accel(2) = rvalue2
-            case ('ANTYPE','antype')
-            	cycle
-            case default
-                write (*, *) 'ERROR: Unknown keyword: ', trim(command)
-                stop
+            !case ('ANTYPE','antype')
+            !	cycle
+            !case default
+            !    write (*, *) 'ERROR: Unknown keyword: ', trim(command)
+            !    stop
             end select
         end do
 
         close (10)
 
         ! Set default analysis type
-        antype = 'STATIC' 
+        antype = 'static'
 
         open (10, file = trim(filename))
 
@@ -367,8 +367,10 @@ contains
 
           backspace (10)
           read (10, *) command
+          
           select case (command)
           case ('FINISH', 'finish')
+          		
                 exit
           case ('ANTYPE', 'antype')
                 backspace (10)
@@ -406,6 +408,8 @@ contains
         300 write (*, *)
         write (*, '("ERROR: no /SOLU FINISH in input file")')
         stop
+
+        
     end subroutine input
 !
 !--------------------------------------------------------------------------------------------------

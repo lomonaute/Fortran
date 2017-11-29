@@ -578,17 +578,17 @@ contains
         real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_1(neqn), D_2dot_1(neqn)
         real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn), int_vect_4(neqn)
         real(wp) :: t, omega, transient_contribution
-        real(wp), parameter :: delta_t = 0.000001
-        real(wp), parameter :: alpha = 0
-        real(wp), parameter :: beta = 0
+        real(wp), parameter :: delta_t = 0.001
+        real(wp), parameter :: alpha = 0.1
+        real(wp), parameter :: beta = 0.1
         integer, parameter :: out_unit = 20
         integer, parameter :: t_steps = 200
         real(wp) :: storage(6,t_steps)
 		
 		n_node = neqn / 2 - 2
         t = 0
-        omega = pi
-        transient_contribution = 0.25
+        omega = 10*pi
+        transient_contribution = 1
 
         ! Build stiffness matrix
         call buildstiff
@@ -622,15 +622,27 @@ contains
 
             
         	write(1,*) 't=', t
-            write(1,*) D
+            
+			
+			
+            !call mmul(D_n_1, int_vect_1, 1)
+            !call mmul(D_n_1, int_vect_2, 2)
+            !call mmul(D_n_2, int_vect_3, 2)
+            !call mmul(D_n_2, int_vect_4, 1)
 
-            call mmul(D_n_1, int_vect_1, 1)
-            call mmul(D_n_1, int_vect_2, 2)
-            call mmul(D_n_2, int_vect_3, 2)
-            call mmul(D_n_2, int_vect_4, 1)
+            int_vect_1 = matmul(kmat, D_n_1)
+            int_vect_2 = matmul(mmat, D_n_1)
+            int_vect_3 = matmul(mmat, D_n_2)
+            int_vect_4 = matmul(kmat, D_n_2)
+            
+			
+            !print *,size(kmat)
+            !print *, size(matmul(kmat, D_n_1))
+            
             
 			D = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
             	+ ((alpha * int_vect_3) + (beta * int_vect_4)) / (2.0_wp * delta_t)
+            write(1,*) D
 				
             if (.not. banded) then
               	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
@@ -676,7 +688,7 @@ contains
 
         ! Plot element values
         allocate (plotval(ne))
-        print*, 'de', d
+        !print*, 'de', d
         do e = 1, ne
             if (element(e)%id == 1) then
                 plotval(e) = stress(e,1)
@@ -687,7 +699,7 @@ contains
             end if
         end do
 		
-		print*, 'storage', storage
+		!print*, 'storage', storage
 !        call plot( elements, eval=plotval, title="Stress", legend=.true. )
 
    end subroutine trans_loading_ccd

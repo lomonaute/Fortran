@@ -13,8 +13,8 @@ if tline(1:3) == ' t='
     C=textscan(tline, '%s %f');
     T= [T, C{2}];
 else
-    %P = [P, cell2mat(textscan(tline, '%f %f %f %f'))];
-    P = [P, cell2mat(textscan(tline, '%f %f'))];
+    P = [P, cell2mat(textscan(tline, '%f %f %f %f'))];
+    %P = [P, cell2mat(textscan(tline, '%f %f'))];
 end
 tline = fgets(fid);
 end
