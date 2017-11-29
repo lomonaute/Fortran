@@ -30,7 +30,7 @@ module plane42
 
 contains
 
-    subroutine plane42_ke(xe, young, nu, thk, dens, ke, me)
+    subroutine plane42_ke(xe, young, nu, thk, dens, ke, me, mHRZ)
 
         !! This subroutine constructs the stiffness matrix for
         !! a isoparametric 4-noded quad element.
@@ -56,6 +56,7 @@ contains
             !! Stiffness matrix
         real(wp), dimension(:,:), intent(out) :: me
         	!! mass element matrix
+        real(wp), dimension(:,:), intent(out) :: mHRZ
         
         real(wp) :: cmat(3,3), fact
         real(wp) :: gaus_co(2), gaus_w
@@ -65,7 +66,7 @@ contains
         real(wp), dimension(2, 2) :: jac
         real(wp), dimension(2, 8) :: n
 			!! Jacobian matrix
-        real(wp) :: detjac
+        real(wp) :: detjac, mass
 			!! Determinant of the jacobian matrix
 
             
@@ -90,9 +91,19 @@ contains
 
             	call shape(xe, gaus_co(i), gaus_co(j), n, bmat, jac, detjac)
 				ke = ke + gaus_w * thk * matmul(transpose(bmat), matmul(cmat, bmat)) * detjac
-				me = me + gaus_w * thk * dens * matmul(transpose(n), n) * detjac
+				me = me + gaus_w * thk * dens * matmul(transpose(n), n) * detjac                
 			end do
-        end do  
+        end do
+		
+		
+        mHRZ = 0
+        mass = 0
+        do i =1, int(sqrt(1.0*size(me)))
+           mass = mass +	me(i,i)
+        end	do
+        do i=1,int(sqrt(1.0*size(me)))
+          mHRZ(i,i) = me(i,i)*sum(me)/mass
+        end do 
 
     end subroutine plane42_ke
 !

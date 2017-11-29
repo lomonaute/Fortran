@@ -1,5 +1,5 @@
 %% This script reads data from a text file inside the Fortran folder
-
+clear
 textfile = 'results.txt';
 
 fid = fopen(textfile, 'r');
@@ -25,10 +25,12 @@ fclose(fid);
 t_steps = length(T);
 P2 = reshape(P, [length(P)/t_steps, t_steps]);
 
-figure
-plot(T, P2)
-xlabel('Time [s]')
-ylabel('Data analysed')
+% figure
+% plot(T, P2)
+% xlabel('Time [s]')
+% ylabel('Data analysed')
 
-[~, t_bound] = min((sum(P2) - 10^50).^2);
-fprintf('10^50 t_step = %0.0f \n', t_bound)
+%[~, t_bound] = min((sum(P2) - 10^50).^2);
+%fprintf('10^50 t_step = %0.0f \n', t_bound)
+
+

@@ -79,13 +79,17 @@ contains
 
         if (.not. banded) then
             ! Factor stiffness matrix
-              print *,'p', p        
+            !print *,'p', p
+        	!  
             call factor(kmat)
+            !print *,'kmat', kmat    
             ! Solve for displacement vector
             call solve(kmat, p)
         else
-          print *,'p', p  
           call bfactor(kmat)
+          !print *,'p', p
+          !print *,'kmat', kmat 
+          
           call bsolve(kmat, p)
 
           
@@ -115,9 +119,9 @@ contains
 
             end if
         end do
-
+	
         call plot( elements, eval=plotval, title="Stress", legend=.true. )
-        print*, 'loop'
+        !print*, 'loop'
         
 		! Von mises stress
         do e= 1, ne
@@ -198,7 +202,7 @@ contains
         real(wp), dimension(mdim) :: xe
         real(wp), dimension(mdim, mdim) :: ke 
 ! Hint for modal analysis:
-        real(wp), dimension(mdim, mdim) :: me 
+        real(wp), dimension(mdim, mdim) :: me, mHRZ 
         real(wp) :: young, area 
 ! Hint for modal analysis and continuum elements:
         real(wp) :: nu, dens, thk
@@ -229,7 +233,7 @@ contains
                  nu = mprop(element(e)%mat)%nu
                  thk = mprop(element(e)%mat)%thk
                  dens = mprop(element(e)%mat)%dens
-            	 call plane42_ke(xe, young, nu, thk, dens, ke, me)
+            	 call plane42_ke(xe, young, nu, thk, dens, ke, me, mHRZ)
 
             end select
 
@@ -237,8 +241,12 @@ contains
             if (.not. banded) then
                 do i = 1, 2*nen
                     do j = 1, 2*nen
-                      	mmat(edof(i), edof(j)) = mmat(edof(i), edof(j)) + me(i, j)
-                        kmat(edof(i), edof(j)) = kmat(edof(i), edof(j)) + ke(i, j)
+                      if (lumpedHRZ) then
+                      	mmat(edof(i), edof(j)) = mmat(edof(i), edof(j)) + mHRZ(i, j)
+                      else
+						mmat(edof(i), edof(j)) = mmat(edof(i), edof(j)) + me(i, j)
+                      end if
+                    kmat(edof(i), edof(j)) = kmat(edof(i), edof(j)) + ke(i, j)
                     end do
                 end do
 
@@ -247,16 +255,20 @@ contains
 				do i = 1, 2*nen
                     do j = 1, 2*nen
                       if (  (  (edof(i)+1-edof(j)) <= bw) .AND. (  (edof(i)+1-edof(j)) > 0 )) then                        
-                        mmat(edof(i)+1 -edof(j), edof(j)) = mmat(edof(i)+1 -edof(j), edof(j)) + me(i, j)
-                        kmat(edof(i)+1 -edof(j), edof(j)) = kmat(edof(i)+1 -edof(j), edof(j)) + ke(i, j)
-                      end if
+                        if (lumpedHRZ) then
+                    	mmat(edof(i)+1 -edof(j), edof(j)) = mmat(edof(i)+1 -edof(j), edof(j))+mHRZ(i, j)
+                      	else
+						mmat(edof(i)+1 -edof(j), edof(j)) = mmat(edof(i)+1 -edof(j), edof(j)) + me(i, j)
+                      	end if
+						kmat(edof(i)+1 -edof(j), edof(j)) = kmat(edof(i)+1 -edof(j), edof(j)) + ke(i, j)
+                       end if
                     end do
             	end do
                 
             end if 
         end do
-        print*, 'E  =', young
-        print*, 'rho  =', dens
+        !print*, 'E  =', young
+        !print*, 'rho  =', dens
     end subroutine buildstiff
 !
 !--------------------------------------------------------------------------------------------------
@@ -340,7 +352,7 @@ contains
         integer :: edof(mdim)
         real(wp), dimension(mdim) :: xe, de
         real(wp), dimension(mdim, mdim) :: ke
-        real(wp), dimension(mdim, mdim) :: me
+        real(wp), dimension(mdim, mdim) :: me, mHRZ
         real(wp) :: young, area 
 		! Hint for continuum elements:
         real(wp):: nu, dens, thk
@@ -378,7 +390,7 @@ contains
                 nu = mprop(element(e)%mat)%nu
                 thk  = mprop(element(e)%mat)%thk
                 dens  = mprop(element(e)%mat)%dens
-                call plane42_ke(xe, young, nu, thk, dens, ke, me)
+                call plane42_ke(xe, young, nu, thk, dens, ke, me, mHRZ)
                 
                 p(edof(1:2*nen)) = p(edof(1:2*nen)) + matmul(ke(1:2*nen,1:2*nen), de(1:2*nen))
 
@@ -411,10 +423,10 @@ contains
         real(wp), dimension(mdim) :: xe
         real(wp), dimension(mdim, mdim) :: ke 
 ! Hint for modal analysis:
-        real(wp), dimension(mdim, mdim) :: me 
+        real(wp), dimension(mdim, mdim) :: me, mHRZ 
         real(wp) :: young, area 
 ! Hint for modal analysis and continuum elements:
-        real(wp) :: nu, dens, thk
+        real(wp) :: nu, dens, thk, mass
         outvector=0.0_wp
         do e = 1, ne
 
@@ -436,22 +448,21 @@ contains
 				dens = mprop(element(e)%mat)%dens
                  thk = mprop(element(e)%mat)%thk
                  nu = mprop(element(e)%mat)%nu
-                 young = mprop(element(e)%mat)%young
-                 
-            	call plane42_ke(xe, young, nu, thk, dens, ke, me)
+                 young = mprop(element(e)%mat)%young                 
+            	call plane42_ke(xe, young, nu, thk, dens, ke, me, mHRZ)
             end select
-			
-            do i = 1, mdim
-              
+			mass = 0
+            do i =1, mdim
+              mass = mass +	me(i,i)
+            end	do
+            do i = 1, mdim              
               do j = 1, mdim
-                if (mtype == 1) then                
+                if (mtype == 1) then
 					outvector(edof(i)) = outvector(edof(i)) + ke(i,j) * invector(edof(j))
                 	elseif (mtype == 2) then
                 	outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j))
                 	elseif (mtype == 3) then
-                    	print *, 'HRZ mass-lumping matrix not implemented yet'
-                    	stop
-                	outvector(edof(i)) = outvector(edof(i)) + me(i,j) * invector(edof(j)) 
+                    outvector(edof(i)) = outvector(edof(i)) + mHRZ(i,j) * invector(edof(j))
                 	else 
                   		print*, 'Problem in mmul subroutine - wrong value for mtype :', mtype
                     	stop
@@ -461,9 +472,7 @@ contains
             end do  
         end do
 
-        !if (mtype ==1) then
-        !  write(1,*) sum(outvector), sum(invector)
-        !end if
+        
             
         
     end subroutine mmul
@@ -501,7 +510,7 @@ contains
             ! Factor stiffness matrix      
             call factor(kmat)
         else
-          call bfactor(kmat)
+            call bfactor(kmat)
         end if
 		
 		eigen_vector = 0.5*1.0_wp
@@ -574,15 +583,16 @@ contains
 
         integer :: e, i, n_node
         real(wp), dimension(:), allocatable :: plotval
+        real(wp), dimension(neqn,neqn) :: cmat
 		real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
         real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_1(neqn), D_2dot_1(neqn)
-        real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn), int_vect_4(neqn)
+        real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn), int_vect_4(neqn), int_vect_5(neqn)
         real(wp) :: t, omega, transient_contribution
-        real(wp), parameter :: delta_t = 0.001
-        real(wp), parameter :: alpha = 0.1
-        real(wp), parameter :: beta = 0.1
+        real(wp), parameter :: delta_t = 0.01
+        real(wp), parameter :: alpha = 0.0
+        real(wp), parameter :: beta = 0.0
         integer, parameter :: out_unit = 20
-        integer, parameter :: t_steps = 200
+        integer, parameter :: t_steps = 7000
         real(wp) :: storage(6,t_steps)
 		
 		n_node = neqn / 2 - 2
@@ -592,23 +602,25 @@ contains
 
         ! Build stiffness matrix
         call buildstiff
+        
         call buildload
 
         ! Remove rigid body modes
         call enforce
 
         if (.not. banded) then  
-        	call factor(mmat)
-            call factor(kmat)
-            call solve(kmat, p)
+        	!call factor(mmat)
+            !call factor(kmat)
+            !call solve(kmat, p)
         else
-        	call bfactor(mmat)
-            call bfactor(kmat)
-            call bsolve(kmat, p)
+        	!call bfactor(mmat)
+            !call bfactor(kmat)
+            !call bsolve(kmat, p)
         end if
 		
-		D_n_1 = p
-        D_n_2 = p
+		cmat = alpha * mmat + beta * kmat
+		D_n_1 = 0
+        D_n_2 = 0
         D_dot_1 = 0
         D_2dot_1 = 0 
 
@@ -617,66 +629,53 @@ contains
         do i = 1, t_steps
         	t = i * delta_t
         	! Build load-vector
+            p=0
         	call build_trans_load(t, omega, transient_contribution, p)
+            
+            
+        	write(1,*) 't=', t          
+			
+			if (lumpedHRZ) then
+            call mmul(D_n_1, int_vect_1, 1)
+            call mmul(D_n_1, int_vect_2, 3)
+            call mmul(D_n_2, int_vect_3, 3)
+            call mmul(D_n_2, int_vect_5, 1)
+            else
+            call mmul(D_n_1, int_vect_1, 1)
+            call mmul(D_n_1, int_vect_2, 2)
+            call mmul(D_n_2, int_vect_3, 2)
+            call mmul(D_n_2, int_vect_5, 1)
+            end if
+			int_vect_4 = alpha*int_vect_3+beta*int_vect_5
+                        
+			p = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
+            	+ (int_vect_4) / (2.0_wp * delta_t)
+                
             call enforce_p
-
-            
-        	write(1,*) 't=', t
-            
+    		D = p
+            write(1,*) D_n_1
 			
-			
-            !call mmul(D_n_1, int_vect_1, 1)
-            !call mmul(D_n_1, int_vect_2, 2)
-            !call mmul(D_n_2, int_vect_3, 2)
-            !call mmul(D_n_2, int_vect_4, 1)
-
-            int_vect_1 = matmul(kmat, D_n_1)
-            int_vect_2 = matmul(mmat, D_n_1)
-            int_vect_3 = matmul(mmat, D_n_2)
-            int_vect_4 = matmul(kmat, D_n_2)
-            
-			
-            !print *,size(kmat)
-            !print *, size(matmul(kmat, D_n_1))
-            
-            
-			D = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
-            	+ ((alpha * int_vect_3) + (beta * int_vect_4)) / (2.0_wp * delta_t)
-            write(1,*) D
-				
             if (.not. banded) then
-              	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
+              	left_side = mmat * (1 / delta_t**2)+ cmat / (2 * delta_t)
+                call enforce_k(left_side)
                 call factor(left_side)
                 call solve(left_side, D)
         	else
-            	left_side = mmat * (1 / delta_t**2 + alpha / (2 * delta_t)) + kmat * beta / (2 * delta_t)
+            	left_side = mmat * (1 / delta_t**2)+ cmat / (2 * delta_t)
+                call enforce_k(left_side)
           		call bfactor(left_side)
-                !print*, 'left_side', left_side
-                !print*, 'D', D
-                !print*, 'size D', size(D)
-        		!print*, 'size left_side', size(left_side)
                 call bsolve(left_side, D)
             end if
-            
+                        
 			D_dot_1 = 0.5_wp * (D - D_n_2) / delta_t
             D_2dot_1 = (D - 2.0_wp * D_n_1 + D_n_2) / delta_t**2
-
-            storage(1, i) = D(2 * n_node - 1)
-            storage(2, i) = D(2 * n_node)
-            storage(3, i) = D_dot_1(2 * n_node - 1)
-            storage(4, i) = D_dot_1(2 * n_node)
-            storage(5, i) = D_2dot_1(2 * n_node - 1)
-            storage(6, i) = D_2dot_1(2 * n_node)
-
-			D_n_2 = D_n_1
-        	D_n_1 = D
-            
+			
+            D_n_2 = D_n_1
+        	D_n_1 = D			
+			
         end do
-		
 		close(1)
-        
-
-       
+               
         ! Recover stress
         call recover
                 
@@ -699,8 +698,6 @@ contains
             end if
         end do
 		
-		!print*, 'storage', storage
-!        call plot( elements, eval=plotval, title="Stress", legend=.true. )
 
    end subroutine trans_loading_ccd
 !
@@ -760,12 +757,13 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine enforce_k
+    subroutine enforce_k(mat)
 
         !! This subroutine enforces the support boundary conditions
 
         use fedata
-
+		
+		real(wp), dimension(neqn,neqn), intent(inout) :: mat
         integer :: i, ii, idof
         real(wp) :: penal
 
@@ -775,34 +773,34 @@ contains
             if (.not. penalty) then
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
-                    kmat(1:neqn, idof) = 0.0_wp
-                    kmat(idof, 1:neqn) = 0.0_wp
-                    kmat(idof, idof) = 1.0_wp
+                    mat(1:neqn, idof) = 0.0_wp
+                    mat(idof, 1:neqn) = 0.0_wp
+                    mat(idof, idof) = 1.0_wp
                 end do
             else
-                penal = penalty_fac*maxval(kmat)
+                penal = penalty_fac*maxval(mat)
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
-                    kmat(idof, idof) = kmat(idof, idof) + penal
+                    mat(idof, idof) = mat(idof, idof) + penal
                 end do  
             end if
         else
             if (.not. penalty) then
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))  
-                    kmat(1:bw, idof) = 0.0_wp
+                    mat(1:bw, idof) = 0.0_wp
                     do ii=1,bw
                       if (idof-ii+1 >= 1) then
-                    	kmat(ii, idof-ii+1) = 0.0_wp
+                    	mat(ii, idof-ii+1) = 0.0_wp
                       end if
                     end do
-                    kmat(1, idof) = 1.0_wp
+                    mat(1, idof) = 1.0_wp
                 end do
             else
-                penal = penalty_fac*maxval(kmat)
+                penal = penalty_fac*maxval(mat)
                 do i = 1, nb
                     idof = int(2*(bound(i,1)-1) + bound(i,2))
-                    kmat(1, idof) = kmat(1, idof) + penal
+                    mat(1, idof) = mat(1, idof) + penal
                 end do  
             end if
         end if

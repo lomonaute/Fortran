@@ -173,6 +173,8 @@ module fedata
         !! Indicate whether the system matrix is in banded form or not (full matrix)
     logical, parameter :: penalty = .false.
         !! Indicate whether boundary conditions are imposed by the penalty method or not (zero-one method)
+    logical, parameter :: lumpedHRZ = .false.
+        !! Lumped mass HRZ method
     real(wp), parameter :: penalty_fac = 1.0e10_wp
         !! Scaling factor for boundary conditions imposed by the penalty method
 
