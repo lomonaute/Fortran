@@ -429,7 +429,7 @@ contains
         real(wp) :: young, area 
 ! Hint for modal analysis and continuum elements:
         real(wp) :: nu, dens, thk, mass
-        outvector=0.0_wp
+        outvector = 0.0_wp
         do e = 1, ne
 
             ! Find coordinates and degrees of freedom
@@ -473,9 +473,6 @@ contains
 			  end do
             end do  
         end do
-
-        
-            
         
     end subroutine mmul
 
@@ -608,59 +605,44 @@ contains
         real(wp), dimension(:), allocatable :: plotval
 !$$$$$$         real(wp), dimension(neqn,neqn) :: cmat
 !$$$$$$         real(wp) :: von_mises(ne), principal_stress(ne, 3)
-        real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn), d_mode(neqn)
+!$$$$$$         real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn), d_mode(neqn)
+        real(wp) :: D_n_1(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn), d_mode(neqn)
         real(wp) :: t, omega, transient_contribution
-        real(wp), parameter :: delta_t = 0.005
+        real(wp), parameter :: delta_t = 0.05
         real(wp), parameter :: alpha = 0.8
         real(wp), parameter :: beta = 0.8
-        integer, parameter :: out_unit = 20
-        integer, parameter :: t_steps = 4000
+        integer, parameter :: t_steps = 1000
         real(wp) :: storage(6,t_steps)
-		 !open (unit = 1, file = "nolumped_0p005_6000.txt")
-		!call eigen
-		method = 0
+
+		method = 3
 		n_node = neqn / 2 - 2
         t = 0
         omega = 10*pi
         transient_contribution = 0
 
-        ! Build stiffness matrix
-        call buildstiff
-        
+		! Build the steady state part of the loadvector
         call buildload
+        
+        ! Build stiffness matrix
+		call buildstiff
 
         ! Remove rigid body modes
         call enforce
 
-		D_n_1 = 0
-        D_n_2 = 0
-        D_dot_n_1 = 0
-        D_2dot_n_1 = 0 
-
 		! transient
         !open (unit = 1, file = "results1.txt")
-        
-        do i = 1, t_steps
-        	t = i * delta_t
-
-            !write(1,*) 't=', t 
-        	! Build load-vector
-            p = 0
-        	call build_trans_load(t, omega, transient_contribution, p)
-            
-            call ccd(D_n_1, D_n_2, storage, delta_t, alpha, beta, i, n_node)
-            !call newmark(D_n_1, D_dot_n_1, D_2dot_n_1, storage, delta_t, alpha, beta, method, i, n_node)
-     		
-			!write(1,*) D_n_1(neqn)
-        end do
-        
-		!close(1)
-       print *, D_n_1(neqn-1), D_n_1(neqn)
-       
+		
+!$$$$$$         call ccd(delta_t, t_steps, alpha, beta, n_node, storage, omega, transient_contribution)
+        call newmark(delta_t, t_steps, omega, alpha, beta, method, n_node, transient_contribution, storage)
+     	
+		open (unit = 1, file = "trans_u_y.txt")	
+		write(1,*) storage(2,:)
+		close(1)       
              
         ! Recover stress
         call recover
-         call stopwatch('stop')       
+        
+        ! call stopwatch('stop')       
         ! Output results
         call output
         
@@ -791,139 +773,171 @@ contains
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine build_trans_load(t, omega, transient_contribution, out_vector)
-
-        !! This subroutine builds the global load vector
-
+!$$$$$$     subroutine build_trans_load(t, omega, transient_contribution, out_vector)
+!$$$$$$ 
+!$$$$$$         !! This subroutine builds the global load vector
+!$$$$$$ 
+!$$$$$$         use fedata
+!$$$$$$         use plane42
+!$$$$$$ 
+!$$$$$$         integer :: i, e, j, eface
+!$$$$$$ ! Hint for continuum elements:
+!$$$$$$         integer, dimension(mdim) :: edof
+!$$$$$$         real(wp), dimension(mdim) :: xe
+!$$$$$$         real(wp), dimension(mdim) :: re
+!$$$$$$         real(wp) ::  thk, fe, dens
+!$$$$$$         real(wp), intent(in) :: t, omega, transient_contribution
+!$$$$$$         real(wp), intent(out) :: out_vector(1:neqn)
+!$$$$$$ 
+!$$$$$$         ! Build load vector
+!$$$$$$         out_vector(1:neqn) = 0
+!$$$$$$         
+!$$$$$$         do i = 1, np            
+!$$$$$$             select case(int(loads(i, 1)))
+!$$$$$$             case( 1 )
+!$$$$$$                 ! Build nodal load contribution
+!$$$$$$                 out_vector(int(2*loads(i,2)-2+loads(i,3))) = loads(i,4)* (1 + sin(t * omega) * transient_contribution)
+!$$$$$$                               
+!$$$$$$             case( 2 )
+!$$$$$$                 ! Build uniformly distributed surface (pressure) load contribution
+!$$$$$$                 e     = loads(i, 2)
+!$$$$$$                 eface = loads(i, 3)
+!$$$$$$                 fe    = loads(i, 4) * (1 + sin(t * omega) * transient_contribution)
+!$$$$$$                 thk   = mprop(element(e)%mat)%thk
+!$$$$$$                 dens   = mprop(element(e)%mat)%dens
+!$$$$$$                 xe    = 0
+!$$$$$$                 edof  = 0 
+!$$$$$$             do j = 1, element(i)%numnode
+!$$$$$$                  xe(2*j-1) = x(element(e)%ix(j),1)
+!$$$$$$                  xe(2*j  ) = x(element(e)%ix(j),2)
+!$$$$$$                  edof(2*j-1) = 2 * element(e)%ix(j) - 1
+!$$$$$$                  edof(2*j)   = 2 * element(e)%ix(j)
+!$$$$$$             end do
+!$$$$$$                 
+!$$$$$$             call plane42_tur_blade(xe, eface, fe, thk, dens, re)
+!$$$$$$                 
+!$$$$$$             do j=1,8 !allocate the loads in {re} onto the {p} vector
+!$$$$$$                 out_vector(edof(j)) = out_vector(edof(j)) + re(j);
+!$$$$$$             end do
+!$$$$$$             
+!$$$$$$             case default
+!$$$$$$                 print *, 'ERROR in fea/buildload'
+!$$$$$$                 print *, 'Load type not known'
+!$$$$$$                 stop
+!$$$$$$             end select
+!$$$$$$         end do     
+!$$$$$$     end subroutine build_trans_load
+!$$$$$$ !
+!$$$$$$ !--------------------------------------------------------------------------------------------------
+!$$$$$$ !       
+    subroutine build_trans_load(steady_load, t, omega, transient_contribution)
+		! This subroutine multiplies the load vector to find the transient load
         use fedata
-        use plane42
 
-        integer :: i, e, j, eface
-! Hint for continuum elements:
-        integer, dimension(mdim) :: edof
-        real(wp), dimension(mdim) :: xe
-        real(wp), dimension(mdim) :: re
-        real(wp) ::  thk, fe, dens
-        real(wp), intent(in) :: t, omega, transient_contribution
-        real(wp), intent(out) :: out_vector(1:neqn)
+        real(wp), intent(in) :: steady_load(1:neqn), t, omega, transient_contribution
 
-        ! Build load vector
-        out_vector(1:neqn) = 0
-  		
-        do i = 1, np            
-            select case(int(loads(i, 1)))
-            case( 1 )
-            	! Build nodal load contribution
-                out_vector(int(2*loads(i,2)-2+loads(i,3))) = loads(i,4)* (1 + sin(t * omega) * transient_contribution)
-                              
-            case( 2 )
-            	! Build uniformly distributed surface (pressure) load contribution
-                e     = loads(i, 2)
-                eface = loads(i, 3)
-                fe	  = loads(i, 4) * (1 + sin(t * omega) * transient_contribution)
-				thk   = mprop(element(e)%mat)%thk
-                dens   = mprop(element(e)%mat)%dens
-                xe    = 0
-                edof  = 0 
-            do j = 1, element(i)%numnode
-                 xe(2*j-1) = x(element(e)%ix(j),1)
-                 xe(2*j  ) = x(element(e)%ix(j),2)
-                 edof(2*j-1) = 2 * element(e)%ix(j) - 1
-                 edof(2*j)   = 2 * element(e)%ix(j)
-            end do
-                
-            call plane42_tur_blade(xe, eface, fe, thk, dens, re)
-                
-			do j=1,8 !allocate the loads in {re} onto the {p} vector
-            	out_vector(edof(j)) = out_vector(edof(j)) + re(j);
-            end do
-            
-            case default
-                print *, 'ERROR in fea/buildload'
-                print *, 'Load type not known'
-                stop
-            end select
-        end do     
+		p = steady_load * (1 + transient_contribution * sin(t * omega))
+
     end subroutine build_trans_load
 !
 !--------------------------------------------------------------------------------------------------
 !   
-    subroutine ccd(D_n_1, D_n_2, storage, delta_t, alpha, beta, i, n_node)
+    subroutine ccd(delta_t, t_steps, alpha, beta, n_node, storage, omega, transient_contribution)
     	
 		use fedata
         use numeth
         use processor
         
     	!real(wp), intent(in), dimension(:) :: p
-        real(wp), intent(in) :: delta_t, alpha, beta
-        integer, intent(in) :: i, n_node
+        real(wp), intent(in) :: delta_t, alpha, beta, omega, transient_contribution
+        integer, intent(in) :: n_node, t_steps
         
-        real(wp), intent(inout), dimension(:) :: D_n_1, D_n_2
-        real(wp), intent(inout), dimension(:,:) :: storage
+		real(wp), dimension(neqn) :: steady_load, D_n_1, D_n_2
+        real(wp), dimension(6, t_steps) :: storage
+        integer :: i
         
-        real(wp) :: D_dot_1(neqn), D_2dot_1(neqn)
+        real(wp) :: D_dot_n_1(neqn), D_2dot_n_1(neqn), t
         real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn), int_vect_4(neqn), int_vect_5(neqn)
+        
+		D_n_1 = 0
+        D_n_2 = 0
+        D_dot_n_1 = 0
+        D_2dot_n_1 = 0
+
+        storage = 0
+        steady_load = p
+        
+		do i = 1, t_steps
+            t = i * delta_t
+            p = 0
+        	call build_trans_load(steady_load, t, omega, transient_contribution)
 		
-		! construct D
-        call mmul(D_n_1, int_vect_1, 1)
-        if (lumpedHRZ) then
-          call mmul(D_n_1, int_vect_2, 3)
-          call mmul(D_n_2, int_vect_3, 3)
-        else
-          call mmul(D_n_1, int_vect_2, 2)
-          call mmul(D_n_2, int_vect_3, 2)
-        end if
-        call mmul(D_n_2, int_vect_5, 1)
-		int_vect_4 = alpha * int_vect_3 + beta * int_vect_5
+			! construct D
+            call mmul(D_n_1, int_vect_1, 1)
+        	if (lumpedHRZ) then
+          		call mmul(D_n_1, int_vect_2, 3)
+          		call mmul(D_n_2, int_vect_3, 3)
+        	else
+          		call mmul(D_n_1, int_vect_2, 2)
+          		call mmul(D_n_2, int_vect_3, 2)
+        	end if
+        	call mmul(D_n_2, int_vect_5, 1)
+			int_vect_4 = alpha * int_vect_3 + beta * int_vect_5
                         
-		p = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
-            + (int_vect_4) / (2.0_wp * delta_t)
+			p = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
+            	+ (int_vect_4) / (2.0_wp * delta_t)
                 
-        call enforce_p
-    	D = p
+        	call enforce_p
+    		D = p
        	
-        if (.not. banded) then
-           	left_side = mmat * (1 / delta_t**2)+ (alpha * mmat + beta * kmat) / (2 * delta_t)
-            call enforce_mat(left_side)
-            call factor(left_side)
-            call solve(left_side, D)
-        else
-          	left_side = mmat * (1 / delta_t**2)+ (alpha * mmat + beta * kmat) / (2 * delta_t)
-            call enforce_mat(left_side)
-        	call bfactor(left_side)
-            call bsolve(left_side, D)
-        end if
+        	if (.not. banded) then
+           		left_side = mmat * (1 / delta_t**2) + (alpha * mmat + beta * kmat) / (2 * delta_t)
+            	call enforce_mat(left_side)
+            	call factor(left_side)
+            	call solve(left_side, D)
+        	else
+          		left_side = mmat * (1 / delta_t**2)+ (alpha * mmat + beta * kmat) / (2 * delta_t)
+            	call enforce_mat(left_side)
+        		call bfactor(left_side)
+            	call bsolve(left_side, D)
+        	end if
             
-		D_dot_1 = 0.5_wp * (D - D_n_2) / delta_t
-        D_2dot_1 = (D - 2.0_wp * D_n_1 + D_n_2) / delta_t**2.0_wp
+			D_dot_n_1 = 0.5_wp * (D - D_n_2) / delta_t
+        	D_2dot_n_1 = (D - 2.0_wp * D_n_1 + D_n_2) / delta_t**2.0_wp
 
-        storage(1, i) = D(2 * n_node - 1)
-        storage(2, i) = D(2 * n_node)
-        storage(3, i) = D_dot_1(2 * n_node - 1)
-        storage(4, i) = D_dot_1(2 * n_node)
-        storage(5, i) = D_2dot_1(2 * n_node - 1)
-        storage(6, i) = D_2dot_1(2 * n_node)
+        	storage(1, i) = D(2 * n_node - 1)
+        	storage(2, i) = D(2 * n_node)
+        	storage(3, i) = D_dot_n_1(2 * n_node - 1)
+        	storage(4, i) = D_dot_n_1(2 * n_node)
+        	storage(5, i) = D_2dot_n_1(2 * n_node - 1)
+        	storage(6, i) = D_2dot_n_1(2 * n_node)
 
-		D_n_2 = D_n_1
-        D_n_1 = D
-            
+			D_n_2 = D_n_1
+        	D_n_1 = D
+        end do
+        
 	end subroutine ccd
 !
 !--------------------------------------------------------------------------------------------------
 !
-    subroutine newmark(D_n_1, D_dot_n_1, D_2dot_n_1, storage, delta_t, alpha, beta, method, i, n_node)
+    subroutine newmark(delta_t, t_steps, omega, alpha, beta, method, &
+    				   n_node, transient_contribution, storage)
 		
         use fedata
         use numeth
         use processor
         
-    	real(wp), intent(inout) :: D_n_1(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn)
-        real(wp), intent(inout), dimension(:,:) :: storage
-        !real(wp), intent(in) :: p(neqn)
-        real(wp), intent(in) :: delta_t, alpha, beta
-        integer, intent(in) :: i, n_node, method
-        real(wp) :: newmark_beta, newmark_gamma!, D(neqn)
-        real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn), D_dot(neqn), D_2dot(neqn)
+    	!real(wp), intent(in) :: p(neqn)
+        real(wp), intent(in) :: delta_t, alpha, beta, transient_contribution, omega
+        integer, intent(in) :: n_node, method, t_steps
+        real(wp), intent(out), dimension(6, t_steps) :: storage
+        
+        real(wp) :: newmark_beta, newmark_gamma, t
+        real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn)
+        real(wp) :: r1(neqn), r2(neqn), r3(neqn)
+        real(wp) :: int_vect_1(neqn), int_vect_2(neqn), int_vect_3(neqn)
+        real(wp) :: D_dot(neqn), D_2dot(neqn), steady_load(neqn)
+        integer :: i
 		
 		if (method == 0) then  ! average acceleration
         	newmark_beta = 0.25
@@ -949,56 +963,128 @@ contains
 		! construct left side
 		left_side = mmat * (1.0_wp / (newmark_beta * delta_t**2.0_wp)) &
         			+ (alpha * mmat + beta * kmat) * (newmark_gamma / (newmark_beta * delta_t)) + kmat
-
-		! construct right side
-        int_vect_1 = D_n_1 * (1.0_wp / (newmark_beta * delta_t**2.0_wp)) &
-        		+ D_dot_n_1 * (1.0_wp / (newmark_beta * delta_t)) &
-                + D_2dot_n_1 * (1.0_wp / (2.0_wp * newmark_beta) - 1.0_wp)
-                
-        int_vect_2 = D_n_1 * (newmark_gamma / (newmark_beta * delta_t)) &
-        		+ D_dot_n_1 * (newmark_gamma / newmark_beta - 1) &
-                + D_2dot_n_1 * delta_t * (newmark_gamma / (2.0_wp * newmark_beta) - 1.0_wp)
-
-        int_vect_3 = int_vect_2
 		
-        call mmul(int_vect_1, int_vect_1, 1)
-        call mmul(int_vect_2, int_vect_2, 1)
-        call mmul(int_vect_3, int_vect_3, 2)
-
-        D = p + int_vect_1 + alpha * int_vect_2 + beta * int_vect_3
-		
-		! int_vect_1 = matmul(mmat, int_vect_1)
-        ! int_vect_2 = matmul(alpha * mmat + beta * kmat, int_vect_2)
-        ! 
-        ! right_side = p + int_vect_1 + int_vect_2
-
-        if (.not. banded) then
+		if (.not. banded) then
           	call enforce_mat(left_side)
             call factor(left_side)
-            call solve(left_side, D)
     	else
         	call enforce_mat(left_side)
       		call bfactor(left_side)
-            call bsolve(left_side, D)
         end if
 
-        D_dot = (D - D_n_1) * (newmark_gamma / (newmark_beta * delta_t)) &
-        		- D_dot_n_1 * (newmark_gamma / newmark_beta - 1) &
-                - delta_t * D_2dot_n_1 * (newmark_gamma / (2.0_wp * newmark_beta - 1.0_wp))
-
-        D_2dot = (D - D_n_1 - delta_t * D_dot_n_1) * (1.0_wp / (newmark_beta * delta_t**2)) &
-                - D_2dot_n_1 * (1.0_wp / (2.0_wp * newmark_beta - 1.0_wp))
-		
-		storage(1, i) = D(2 * n_node - 1)
-        storage(2, i) = D(2 * n_node)
-        storage(3, i) = D_dot(2 * n_node - 1)
-        storage(4, i) = D_dot(2 * n_node)
-        storage(5, i) = D_2dot(2 * n_node - 1)
-        storage(6, i) = D_2dot(2 * n_node)
+		D_n_1 = 0
+        D_n_2 = 0
+        D_dot_n_1 = 0
         
-        D_n_1 = D
-        D_dot_n_1 = D_dot
-        D_2dot_n_1 = D_2dot
+        storage = 0
+        steady_load = p
+
+        call mmul(D_n_1, int_vect_1, 1)
+        call mmul(D_dot_n_1, int_vect_2, 1)
+        
+        if (lumpedHRZ) then
+          	call mmul(D_dot_n_1, int_vect_3, 3)
+        else
+          	call mmul(D_dot_n_1, int_vect_3, 2)
+        end if
+            
+		p = p - int_vect_1 - alpha * int_vect_2 - beta * int_vect_3
+        call enforce_p
+
+        D_2dot_n_1 = p
+        
+		call enforce_mat(mmat)
+        if (.not. banded) then
+            call solve(mmat, D_2dot_n_1)
+    	else
+            call bsolve(mmat, D_2dot_n_1)
+        end if
+
+        storage(1, 1) = D_n_1(2 * n_node - 1)
+        storage(2, 1) = D_n_1(2 * n_node)
+        storage(3, 1) = D_dot_n_1(2 * n_node - 1)
+        storage(4, 1) = D_dot_n_1(2 * n_node)
+        storage(5, 1) = D_2dot_n_1(2 * n_node - 1)
+        storage(6, 1) = D_2dot_n_1(2 * n_node)
+
+        do i = 2,t_steps
+        	t = (i - 1) * delta_t
+            
+            p = 0
+        	call build_trans_load(steady_load, t, omega, transient_contribution)
+			
+!$$$$$$             print*, ' '
+!$$$$$$             print*, p
+           
+            ! construct right side
+            r1 = D_n_1 * (1.0_wp / (newmark_beta * delta_t**2.0_wp)) &
+                    + D_dot_n_1 * (1.0_wp / (newmark_beta * delta_t)) &
+                    + D_2dot_n_1 * (1.0_wp / (2.0_wp * newmark_beta) - 1.0_wp)
+            
+            r2 = D_n_1 * (newmark_gamma / (newmark_beta * delta_t)) &
+                    + D_dot_n_1 * (newmark_gamma / newmark_beta - 1) &
+                    + D_2dot_n_1 * delta_t * (newmark_gamma / (2.0_wp * newmark_beta) - 1.0_wp)
+    
+            r3 = r2
+            
+            call mmul(r1, int_vect_1, 1)
+            call mmul(r2, int_vect_2, 1)
+                    
+!$$$$$$             print*, ' '
+!$$$$$$             print*, int_vect_1
+            
+            if (.not. lumpedHRZ) then
+              	call mmul(r1, int_vect_1, 2)
+            	call mmul(r2, int_vect_2, 2)
+    		else
+              	call mmul(r1, int_vect_1, 3)
+            	call mmul(r2, int_vect_2, 3)
+        	end if
+
+            call mmul(r3, int_vect_3, 1)
+
+!$$$$$$             print*, 'int_vect_3'
+!$$$$$$             print*, int_vect_3
+
+            p = p + int_vect_1 + alpha * int_vect_2 + beta * int_vect_3
+
+            call enforce_p
+    		D = p
+
+!$$$$$$             print*, 'D ='
+!$$$$$$             print*, D            
+
+        	if (.not. banded) then
+            	call solve(left_side, D)
+    		else
+            	call bsolve(left_side, D)
+        	end if
+
+!$$$$$$             print*, 'D ='
+!$$$$$$             print*, D
+        
+            D_dot = (D - D_n_1) * (newmark_gamma / (newmark_beta * delta_t)) &
+                    - D_dot_n_1 * (newmark_gamma / newmark_beta - 1) &
+                    - delta_t * D_2dot_n_1 * ((newmark_gamma / (2.0_wp * newmark_beta)) - 1.0_wp)
+    
+            D_2dot = (D - D_n_1 - delta_t * D_dot_n_1) * (1.0_wp / (newmark_beta * delta_t**2)) &
+                    - D_2dot_n_1 * ((1.0_wp / (2.0_wp * newmark_beta)) - 1.0_wp)
+            
+            storage(1, i) = D(2 * n_node - 1)
+            storage(2, i) = D(2 * n_node)
+            storage(3, i) = D_dot(2 * n_node - 1)
+            storage(4, i) = D_dot(2 * n_node)
+            storage(5, i) = D_2dot(2 * n_node - 1)
+            storage(6, i) = D_2dot(2 * n_node)
+            
+            D_n_1 = D
+            D_dot_n_1 = D_dot
+            D_2dot_n_1 = D_2dot
+            
+!$$$$$$             print*, ' '
+!$$$$$$             print*, D_n_1 - D
+            
+    	end do  
         
 	end subroutine newmark
     
