@@ -97,7 +97,9 @@ contains
 
         ! Transfer results
         d(1:neqn) = p(1:neqn)
-        
+        open (unit = 1, file = "displ_static.txt")
+        write(1,*) d
+        close(1)
         ! Recover stress
         call recover
                 
@@ -119,7 +121,7 @@ contains
 
             end if
         end do
-	
+		
         call plot( elements, eval=plotval, title="Stress", legend=.true. )
         !print*, 'loop'
         
@@ -413,7 +415,7 @@ contains
 
 		real(wp), dimension(neqn), intent(in) :: invector
         integer, intent(in) :: mtype
-		real(wp), dimension(neqn), intent(out) :: outvector
+		real(wp), dimension(:), intent(out) :: outvector
         
         integer :: e, i, j
         integer :: nen 
@@ -487,15 +489,15 @@ contains
         use fedata
         use numeth
         use processor
-
-        integer :: e, i, j,idof
-        real(wp), dimension(:), allocatable :: plotval
-		!real(wp) :: von_mises(ne),principal_stress(ne, 3) , bcos
-		integer, parameter :: p_max=1000
-        real(dp), parameter :: epsilon = 10.0**(-15)
+        
         logical :: error
-		real(wp) :: rp, lambda
-        real(wp), dimension(neqn) :: eigen_vector, eigen_vector_p_1, y_vector, y_vector_p_1
+		integer :: i, j, p_it, n, idof
+		integer, parameter :: p_max=1000, neig = 5, x_val=5
+        real(wp), dimension(neqn) :: x_vector, x_vector_p_1, y_vector, y_vector_p_1, d_mode
+        real(wp), dimension(neqn, neig) :: z_vector, d_vector
+        real(wp), dimension(neig) :: c_var, lambda, omega
+        real(wp) :: rp
+        real(dp), parameter :: epsilon = 10.0**(-16)
         
         ! Build load-vector
         call buildload
@@ -505,72 +507,93 @@ contains
 
         ! Remove rigid body modes
         call enforce
-		!print *, 'kmat =', kmat
-        if (.not. banded) then
-            ! Factor stiffness matrix      
+		
+		! Factor stiffness matrix  
+        if (.not. banded) then                
             call factor(kmat)
         else
-            call bfactor(kmat)
+          	call bfactor(kmat)
         end if
 		
-		eigen_vector = 0.5*1.0_wp
+		! Initialize {D}_0 and {Z}_0
+        d_vector = 0.0_wp
+        z_vector = 0.0_wp
         
-        do i = 1, nb
-        	idof = int(2 * (bound(i,1)-1) + bound(i,2))
-        	eigen_vector(idof) = bound(i, 3)
-        end do
+		do i = 1, neig
+			!Initial guess for eigenvector {X}_0 and boundary conditions
+			x_vector = 0.5*1.0_wp
+        	
+        	do n = 1, nb
+        		idof = int(2 * (bound(n,1)-1) + bound(n,2))
+        		x_vector(idof) = bound(n, 3)
+        	end do
 
-		call mmul(eigen_vector, y_vector, 2)
-       
-        do j = 1,p_max
+            call mmul(x_vector, y_vector,2)
+            
+			! Compute {Z}j = [M]{D}j	
+			do j=1, i-1
+            	call mmul(d_vector(1:neqn, j), z_vector(1:neqn, j),2)                
+            end do
 
-            eigen_vector_p_1 = eigen_vector
-            y_vector_p_1 = y_vector
-          ! Solve KX = Y
-			if (.not. banded) then
-            	call solve(kmat, y_vector)
-        	else
-          		call bsolve(kmat, y_vector)
-        	end if
+        	! Iteration 
+        	do p_it = 1,p_max
+            	x_vector_p_1 = x_vector
+            	y_vector_p_1 = y_vector
+          	! Solve KX = Y
+				if (.not. banded) then
+            		call solve(kmat, y_vector)
+        		else
+          			call bsolve(kmat, y_vector)
+        		end if
 		      
-            ! Transfer results
-            eigen_vector(1:neqn) = y_vector(1:neqn)
-            
-			! Boundary conditions
-        	!do i = 1, nb
-        	!	idof = int(2 * (bound(i,1)-1) + bound(i,2))
-        	!	eigen_vector(idof) = bound(i, 3)
-        	!end do
-            
-			! Compute new Y
-            call mmul(eigen_vector, y_vector, 2)
-
-            ! Compute rp
-            rp = sqrt(dot_product(eigen_vector, y_vector)) 
-            y_vector = y_vector / rp
+            	! Transfer results
+            	x_vector(1:neqn) = y_vector(1:neqn)
 			
-            error = ((sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
-              / sqrt(dot_product(eigen_vector, eigen_vector))) < epsilon)
+				do n = 1, nb
+        			idof = int(2 * (bound(n,1)-1) + bound(n,2))
+        			x_vector(idof) = bound(n, 3)
+            	end do
+                
+            	do j=1, i-1
+              		c_var(j) =  dot_product(x_vector, z_vector(1:neqn,j))
+              		x_vector = x_vector - c_var(j)*d_vector(1:neqn,j)
+            	end do
+		              
+				! Compute new Y
+            	call mmul(x_vector, y_vector,2)
+			
+            	! Compute rp
+            	rp = sqrt(dot_product(x_vector, y_vector)) 
+            	y_vector = y_vector / rp
+			
+            	error = ((sqrt(dot_product(x_vector - x_vector_p_1, x_vector - x_vector_p_1)) &
+              		/ sqrt(dot_product(x_vector, x_vector))) < epsilon)
             
             
-			if (error) then
-              print *, 'convergence eigen'
-              exit
-			end if
-               
-        end do
-        print *, 'Error on delta eigen', (sqrt(dot_product(eigen_vector - eigen_vector_p_1, eigen_vector - eigen_vector_p_1)) &
-              / sqrt(dot_product(eigen_vector, eigen_vector)))*10**12
-		d = eigen_vector / rp
-        lambda = dot_product(eigen_vector, y_vector_p_1) / rp**2 
-		
-		print*, 'omega  =', sqrt(lambda)
+				if (error) then
+              		print *, 'Eigenmode calculation converged'
+              		exit
+				end if
+        	end do       
         
-		!call plot(2, eigenfreq=lambda, eigenvector=d)
-        call plot( what = 16, eigenfreq=lambda, eigenvector=d, tend =20.d0)
-		!call plot(what='eigenmode','xwin', 'color','',(/lambda/), d(1:neqn), (/1000.d0, 2.d0/)) 
+			d_vector(1:neqn,i) = x_vector / rp
+        	lambda(i) = dot_product(x_vector, y_vector_p_1) / rp**2 		
+        end do
+
+        
+        omega = sqrt(lambda)
+        !print*, 'omega', omega
+        d = reshape(d_vector(1:neqn, 5), (/neqn/))
+        !call plot( what = 16, eigenfreq=lambda(2), eigenvector=d, tend =10.d0)
+
+		!open (unit = 1, file = "results.txt")
+        !do i=1,5
+        !write(1,*) i,  omega(i)
+		!write(1,'(2f20.8)') reshape(d_vector(1:neqn, i), (/neqn/))  
+		!end do
+        !close(1)
    end subroutine eigen
-!
+
 !--------------------------------------------------------------------------------------------------
 !
     subroutine trans_loading
@@ -585,20 +608,21 @@ contains
         real(wp), dimension(:), allocatable :: plotval
 !$$$$$$         real(wp), dimension(neqn,neqn) :: cmat
 !$$$$$$         real(wp) :: von_mises(ne), principal_stress(ne, 3)
-        real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn)
+        real(wp) :: D_n_1(neqn), D_n_2(neqn), D_dot_n_1(neqn), D_2dot_n_1(neqn), d_mode(neqn)
         real(wp) :: t, omega, transient_contribution
-        real(wp), parameter :: delta_t = 0.0000001
-        real(wp), parameter :: alpha = 0.0
-        real(wp), parameter :: beta = 0.0
+        real(wp), parameter :: delta_t = 0.005
+        real(wp), parameter :: alpha = 0.8
+        real(wp), parameter :: beta = 0.8
         integer, parameter :: out_unit = 20
-        integer, parameter :: t_steps = 100
+        integer, parameter :: t_steps = 4000
         real(wp) :: storage(6,t_steps)
-		
+		 !open (unit = 1, file = "nolumped_0p005_6000.txt")
+		!call eigen
 		method = 0
 		n_node = neqn / 2 - 2
         t = 0
         omega = 10*pi
-        transient_contribution = 1
+        transient_contribution = 0
 
         ! Build stiffness matrix
         call buildstiff
@@ -607,84 +631,40 @@ contains
 
         ! Remove rigid body modes
         call enforce
-!$$$$$$ 
-!$$$$$$         if (.not. banded) then  
-!$$$$$$             !call factor(mmat)
-!$$$$$$             !call factor(kmat)
-!$$$$$$             !call solve(kmat, p)
-!$$$$$$         else
-!$$$$$$             !call bfactor(mmat)
-!$$$$$$             !call bfactor(kmat)
-!$$$$$$             !call bsolve(kmat, p)
-!$$$$$$         end if
-		
-!$$$$$$         cmat = alpha * mmat + beta * kmat
+
 		D_n_1 = 0
         D_n_2 = 0
         D_dot_n_1 = 0
         D_2dot_n_1 = 0 
 
 		! transient
-        open (unit = 1, file = "results.txt")
+        !open (unit = 1, file = "results1.txt")
+        
         do i = 1, t_steps
         	t = i * delta_t
+
+            !write(1,*) 't=', t 
         	! Build load-vector
             p = 0
         	call build_trans_load(t, omega, transient_contribution, p)
             
-!$$$$$$             call ccd(D_n_1, D_n_2, storage, delta_t, alpha, beta, i, n_node)
-            call newmark(D_n_1, D_dot_n_1, D_2dot_n_1, storage, delta_t, alpha, beta, method, i, n_node)
-
-			
-!$$$$$$             write(1,*) 't=', t          
-!$$$$$$             
-!$$$$$$             if (lumpedHRZ) then
-!$$$$$$                 call mmul(D_n_1, int_vect_1, 1)
-!$$$$$$                 call mmul(D_n_1, int_vect_2, 3)
-!$$$$$$                 call mmul(D_n_2, int_vect_3, 3)
-!$$$$$$                 call mmul(D_n_2, int_vect_5, 1)
-!$$$$$$             else
-!$$$$$$                 call mmul(D_n_1, int_vect_1, 1)
-!$$$$$$                 call mmul(D_n_1, int_vect_2, 2)
-!$$$$$$                 call mmul(D_n_2, int_vect_3, 2)
-!$$$$$$                 call mmul(D_n_2, int_vect_5, 1)
-!$$$$$$             end if
-!$$$$$$             int_vect_4 = alpha*int_vect_3+beta*int_vect_5
-!$$$$$$                         
-!$$$$$$             p = p - int_vect_1 + 2.0_wp * int_vect_2 / delta_t**2 - int_vect_3 / delta_t**2 &
-!$$$$$$                 + (int_vect_4) / (2.0_wp * delta_t)
-!$$$$$$                 
-!$$$$$$             call enforce_p
-!$$$$$$             D = p
-!$$$$$$             write(1,*) D_n_1
-!$$$$$$             
-!$$$$$$             if (.not. banded) then
-!$$$$$$                 left_side = mmat * (1 / delta_t**2)+ cmat / (2 * delta_t)
-!$$$$$$                 call enforce_mat(left_side)
-!$$$$$$                 call factor(left_side)
-!$$$$$$                 call solve(left_side, D)
-!$$$$$$             else
-!$$$$$$                 left_side = mmat * (1 / delta_t**2)+ cmat / (2 * delta_t)
-!$$$$$$                 call enforce_mat(left_side)
-!$$$$$$                 call bfactor(left_side)
-!$$$$$$                 call bsolve(left_side, D)
-!$$$$$$             end if
-!$$$$$$                         
-!$$$$$$             D_dot_1 = 0.5_wp * (D - D_n_2) / delta_t
-!$$$$$$             D_2dot_1 = (D - 2.0_wp * D_n_1 + D_n_2) / delta_t**2
-!$$$$$$             
-!$$$$$$             D_n_2 = D_n_1
-!$$$$$$             D_n_1 = D           
-			
+            call ccd(D_n_1, D_n_2, storage, delta_t, alpha, beta, i, n_node)
+            !call newmark(D_n_1, D_dot_n_1, D_2dot_n_1, storage, delta_t, alpha, beta, method, i, n_node)
+     		
+			!write(1,*) D_n_1(neqn)
         end do
-		close(1)
-               
+        
+		!close(1)
+       print *, D_n_1(neqn-1), D_n_1(neqn)
+       
+             
         ! Recover stress
         call recover
-                
+         call stopwatch('stop')       
         ! Output results
         call output
-		!call stopwatch('stop')
+        
+		
         ! Plot deformed shape
         call plot( undeformed + deformed )
 
@@ -765,7 +745,7 @@ contains
 
         use fedata
 		
-		real(wp), dimension(neqn,neqn), intent(inout) :: mat
+		real(wp), dimension(:,:), intent(inout) :: mat
         integer :: i, ii, idof
         real(wp) :: penal
 
@@ -886,8 +866,13 @@ contains
 		
 		! construct D
         call mmul(D_n_1, int_vect_1, 1)
-        call mmul(D_n_1, int_vect_2, 2)
-        call mmul(D_n_2, int_vect_3, 2)
+        if (lumpedHRZ) then
+          call mmul(D_n_1, int_vect_2, 3)
+          call mmul(D_n_2, int_vect_3, 3)
+        else
+          call mmul(D_n_1, int_vect_2, 2)
+          call mmul(D_n_2, int_vect_3, 2)
+        end if
         call mmul(D_n_2, int_vect_5, 1)
 		int_vect_4 = alpha * int_vect_3 + beta * int_vect_5
                         
@@ -896,8 +881,7 @@ contains
                 
         call enforce_p
     	D = p
-        write(1,*) D_n_1
-			
+       	
         if (.not. banded) then
            	left_side = mmat * (1 / delta_t**2)+ (alpha * mmat + beta * kmat) / (2 * delta_t)
             call enforce_mat(left_side)
